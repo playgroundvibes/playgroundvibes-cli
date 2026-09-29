@@ -5,6 +5,7 @@ import { getSkillPath, installSkill } from '../skills/install.js';
 import type { CLIArguments } from './arguments.js';
 import { requirePublicationConsent } from './consent.js';
 import { printHelp, printJson, printReview } from './output.js';
+import { confirmClaudeCommands } from './skill-permissions.js';
 
 async function openBrowser(url: string): Promise<void> {
   let executable: string;
@@ -48,9 +49,19 @@ export async function executeCommand({ configDir, command }: CLIArguments): Prom
     case 'skill-path':
       process.stdout.write(`${getSkillPath()}\n`);
       return;
-    case 'skill-install':
-      printJson(await installSkill({ directory: command.directory }));
+    case 'skill-install': {
+      const allowClaudeCommands =
+        command.allowClaudeCommands || (command.claude && (await confirmClaudeCommands()));
+      printJson(
+        await installSkill({
+          directory: command.directory,
+          claude: command.claude,
+          allowClaudeCommands,
+          packageManager: allowClaudeCommands ? command.packageManager : undefined,
+        }),
+      );
       return;
+    }
   }
 
   const client = createPlaygroundClient({ configDir });

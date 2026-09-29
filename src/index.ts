@@ -30,4 +30,10 @@ export type {
 
 // Skill installation has no publication side effects.
 export { getSkillPath, installSkill } from './skills/install.js';
-export type { InstallSkillOptions, InstallSkillResult } from './skills/install.js';
+export type {
+  InstallSkillOptions,
+  InstallSkillResult,
+  ClaudePermissionResult,
+  GlobalCLIResult,
+  SkillPackageManager,
+} from './skills/install.js';

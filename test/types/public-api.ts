@@ -8,7 +8,13 @@ import {
   type Review,
 } from '@playgroundvibes/cli';
 import { scanText, BINARY_SIGNATURES } from '@playgroundvibes/cli/filtering';
-import { installSkill, type InstallSkillOptions } from '@playgroundvibes/cli/skills';
+import {
+  installSkill,
+  type InstallSkillOptions,
+  type ClaudePermissionResult,
+  type GlobalCLIResult,
+  type SkillPackageManager,
+} from '@playgroundvibes/cli/skills';
 
 const manifest: Manifest = {
   title: 'Demo',
@@ -17,6 +23,23 @@ const manifest: Manifest = {
   remix: true,
 };
 const installation: InstallSkillOptions = { cwd: '/project' };
+const claudeInstallation: InstallSkillOptions = {
+  cwd: '/project',
+  claude: true,
+  allowClaudeCommands: true,
+  packageManager: 'pnpm',
+};
+async function installForClaude(): Promise<ClaudePermissionResult | undefined> {
+  return (await installSkill(claudeInstallation)).claudePermissions;
+}
+void installForClaude;
+async function ensureSkillDependency(): Promise<GlobalCLIResult | undefined> {
+  const result = await installSkill(claudeInstallation);
+  const manager: SkillPackageManager | undefined = result.globalCLI?.packageManager;
+  void manager;
+  return result.globalCLI;
+}
+void ensureSkillDependency;
 void manifest;
 void installation;
 void installSkill;

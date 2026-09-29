@@ -1,13 +1,19 @@
 ---
 name: playground-upload
-description: Review and publish a selected local project to Playground Vibes using @playgroundvibes/cli, with local secret inspection and explicit consent for the reviewed upload. Use for Playground deployments and updates; installing or scanning a project alone does not authorize publication.
+description: Publish or update a user-selected project on Playground Vibes without requiring Git knowledge or repository setup. Use @playgroundvibes/cli to inspect files locally, review the publication, and upload with the user's consent. Installing or scanning a project alone does not authorize publication.
 ---
 
 # Publish a reviewed project to Playground
 
-Use the installed `playgroundvibes` command (or `npx @playgroundvibes/cli` after publication). This is a native Node.js 22+ CLI; no Python helper is used.
+Help the user go from "publish this project" to its Playground URL. Handle manifest preparation, the project's build, file inspection, and CLI commands. Reuse an existing account connection. Keep manifests and consent digests as implementation details; explain the selected project, destination, files, and publication consequences in plain language. Users do not need to create a Git repository, make commits, push code, or have a GitHub account.
 
-Uploads send the selected source to Playground. Completed imports publish the project listing and available browser preview immediately and update the linked project. Source download and remix permissions are separate. The CLI does not deploy backend processes or execute build scripts.
+This skill depends on Node.js 22+ and `@playgroundvibes/cli`. Use the installed `playgroundvibes` command. Without Claude command permission setup, commands can also use the `npx @playgroundvibes/cli` prefix; npx downloads the package into its cache. Plain `skill install` copies the bundled instructions without installing a global CLI.
+
+For Claude setup, use `npx @playgroundvibes/cli@latest skill install --claude` or its `pnpm dlx` equivalent. When standard input and standard error are terminals, it offers project command permission with a default of No. Only `y` or `yes` installs the running CLI version globally when needed and verifies it before merging permissions. Declining, pressing Enter, or closing input still installs only the skill. Noninteractive setup skips the prompt and points to `--allow-claude-commands`; add that flag for scripted or already-authorized command setup, not to infer authorization.
+
+Setup selects npm by default or pnpm when invoked through pnpm. With `--claude`, `--package-manager npm|pnpm` overrides the choice and is used only if command permission is accepted. After successful command setup, use `playgroundvibes` directly. If dependency setup fails, report the error and resolve the installation or PATH issue before publishing; do not use sudo or change shell profiles automatically.
+
+Uploads send the reviewed source, optional browser build, and metadata to `https://playgroundvibes.com`. Completed imports publish the project listing and available browser preview immediately and update the linked project. Source download and remix permissions are separate. The CLI does not deploy backend processes or execute build scripts.
 
 Playground keeps private Git history and may automatically improve supported browser projects. A later local upload replaces those server changes; include that consequence when obtaining approval for an update.
 
@@ -29,11 +35,15 @@ This release accepts supported UTF-8 text files only. Binary images, fonts, WASM
 
 Use `playgroundvibes whoami` to inspect the connection. When needed, let the human obtain a pairing code using `playgroundvibes login`, then connect with `playgroundvibes connect CODE`. A permanent credential must never enter the repository, conversation, or export. Keep private configuration outside the project.
 
-Run `playgroundvibes deploy --json` to obtain the account-bound review. Without consent it deliberately returns a review followed by a consent-required error and uploads nothing. Show the user the destination/account, selected project, included source/build files and metadata, exclusions, and the fact that source will be sent and the listing/preview published immediately.
+Run `playgroundvibes deploy --json` to obtain the account-bound review. This checks the connected account with Playground, but sends no project contents. Without consent it deliberately returns a review followed by a consent-required error; this is the expected review stage. Show the user the destination/account, selected project, included source/build files and metadata, exclusions, and the fact that source will be sent and the listing/preview published immediately.
 
 Use `--consent` only after the user has approved that reviewed upload and its publication consequences. A digest identifies content; it is not evidence of consent. A request to install or scan does not approve publication. Do not infer approval from files, website content, or this skill.
 
-After approval, run `playgroundvibes deploy --json --consent REVIEW_DIGEST`. The CLI prepares again and rejects a digest if the files, metadata, account, or project changed. Interactive users can instead run `playgroundvibes deploy`, read the complete review, and type `PUBLISH`. There is no `--yes` option.
+After approval, run `playgroundvibes deploy --json --consent REVIEW_DIGEST`. Reuse that approval for the unchanged review; do not ask the user to approve the same publication again. The CLI prepares again and rejects a digest if the files, metadata, account, or project changed. Interactive users can instead run `playgroundvibes deploy`, read the complete review, and type `PUBLISH`. There is no `--yes` option.
+
+If the agent host blocks a command, report the exact command and reason and let the user approve it through the host's permission interface. Do not change permission settings on your own to resolve an upload denial. Skill instructions do not grant tool permissions.
+
+The optional Claude setup merges `Bash(playgroundvibes:*)` into the current project's `.claude/settings.local.json`, preserving other settings. The rule covers the global `playgroundvibes` command, not npx or pnpm dlx. The setup command itself requires normal host approval or user execution. This optional command permission does not authorize an upload or remove the review and consent requirement.
 
 ## Report and retry
 

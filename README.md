@@ -2,6 +2,8 @@
 
 Publish a reviewed project to [Playground Vibes](https://playgroundvibes.com/). The CLI and API are written in strict TypeScript, compiled to JavaScript for npm, and run on Node.js 22+. Python is not required.
 
+Users can ask their coding agent to publish a project without learning Git, creating a repository, or using GitHub. The agent prepares the project and shows the publication review; the user connects their Playground account when needed, approves the reviewed upload, and receives the project URL. Existing account connections and project identities are reused for updates.
+
 The CLI uses the owner's pairing and upload protocol. It scans selected files locally, shows the complete upload review, and requires explicit consent before any project content is posted. Completed uploads publish the listing and browser preview immediately. Selected source is sent to Playground; source download and remix permissions remain separate.
 
 The service keeps private Git history and can automatically improve supported browser projects. A later local deployment replaces those server changes. Backend processes and databases are not deployed by this CLI. See [server compatibility](docs/server-compatibility.md) for the verified request contract and deliberate client-side restrictions.
@@ -178,6 +180,60 @@ await scanText('export const greeting = "hello";', 'src/main.ts');
 `scanText` resolves when the configured text checks pass and throws `ScanError` with safe path/line/rule findings when they fail. It is not a project approval: full preparation also checks paths, file types, ignore rules, metadata, and artifact limits. Exported policy tables are descriptive and immutable; they cannot disable deployment checks.
 
 ## Agent skill
+
+Once this package is published to npm, users can install the skill from their project's directory without a global CLI installation or adding a project dependency:
+
+```sh
+npx @playgroundvibes/cli@latest skill install
+```
+
+Or with pnpm:
+
+```sh
+pnpm dlx @playgroundvibes/cli@latest skill install
+```
+
+The package runs from the package manager's cache; the skill is copied into the project. Node.js 22+ is required. Later commands can use the same prefix, such as `npx @playgroundvibes/cli@latest deploy --dry-run --json`.
+
+For Claude Code, install into its project skill directory:
+
+```sh
+npx @playgroundvibes/cli@latest skill install --claude
+```
+
+When standard input and standard error are terminals, setup asks whether to install the CLI globally and allow Claude to run it for this project. The default is **No**. Answer `y` or `yes` to accept; declining, pressing Enter, or closing input still installs the skill without changing global packages or permissions.
+
+Or use pnpm:
+
+```sh
+pnpm dlx @playgroundvibes/cli@latest skill install --claude
+```
+
+Noninteractive setup skips the prompt, installs only the skill, and points to the explicit flag. For scripted or already-authorized command setup, bypass the prompt with:
+
+```sh
+npx @playgroundvibes/cli@latest skill install --claude --allow-claude-commands
+```
+
+When accepted, the installer checks the selected package manager's global installation records. It reuses a matching version or installs the exact CLI version running the setup command from the public npm registry. It verifies the global package, executable, and PATH before adding permissions; an npx cache copy does not count as a global installation. Installation uses npm by default or pnpm when invoked through pnpm. With `--claude`, `--package-manager npm` or `--package-manager pnpm` overrides that choice; it is used only if command permission is accepted.
+
+Once the dependency is ready, setup merges the following rule into `.claude/settings.local.json` in the current project:
+
+```json
+{
+  "permissions": {
+    "allow": ["Bash(playgroundvibes:*)"]
+  }
+}
+```
+
+Existing settings, including other allow, ask, and deny rules, are preserved. Repeating the command does not add a duplicate. Global installation and permission changes require an affirmative prompt answer or `--allow-claude-commands`. An edited existing skill is preserved; installation reports the conflict instead of overwriting it or granting new permissions. If dependency installation or verification fails, permissions are left unchanged.
+
+After setup, use `playgroundvibes` directly: the rule does not match `npx` or `pnpm dlx` invocations. The initial setup still requires normal host approval or running the command yourself in a terminal. If pnpm reports that its global bin directory is not on PATH, run `pnpm setup`, reopen the terminal, and retry; the installer does not edit shell profiles or use sudo. Claude's deny rules and other host policies remain effective. See [Claude's permission rules](https://code.claude.com/docs/en/permissions).
+
+Command access does not approve a project's publication. The CLI still scans and reviews files and requires publication consent before uploading.
+
+For an existing global installation:
 
 ```sh
 playgroundvibes skill install

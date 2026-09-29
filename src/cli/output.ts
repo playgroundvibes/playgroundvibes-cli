@@ -11,7 +11,8 @@ Commands:
   deploy [--dry-run] [--json] [--consent SHA256]
                           Review this project's files and publish with consent
   skill path              Print the bundled agent skill directory
-  skill install [--path DIR]
+  skill install [--path DIR] [--claude] [--allow-claude-commands]
+                [--package-manager npm|pnpm]
                           Install the skill (default: .agents/skills/playground-upload)
 
 Options:
@@ -36,6 +37,16 @@ A later local upload replaces those server changes.
 
 Requires Node.js 22+. Installing the package does not install its skill or upload
 a project. Run "playgroundvibes skill install" to add the skill explicitly.
+
+skill install --claude uses .claude/skills/playground-upload unless --path is set.
+In a terminal, it asks whether to enable commands for the current project [y/N].
+Accepting ensures the same package version is installed globally, then merges
+Bash(playgroundvibes:*) into the project's .claude/settings.local.json.
+Declining or running without a terminal installs only the skill.
+With --claude, --allow-claude-commands enables setup without prompting.
+Setup uses the invoking npm/pnpm automatically; --package-manager npm|pnpm
+overrides that choice and requires --claude.
+This permission setup does not grant publication consent.
 `;
 
 export function printHelp(): void {

@@ -1,49 +1,38 @@
 import { constants } from 'node:fs';
-import { lstat, mkdir, open, readFile, type FileHandle } from 'node:fs/promises';
+import { lstat, open, readFile, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import {
+  prepareClaudeCommandPermission,
+  type ClaudePermissionResult,
+} from './claude-permissions.js';
+import { ensureDirectory, errorCode } from './filesystem.js';
+import { ensureGlobalCLI, type GlobalCLIResult, type SkillPackageManager } from './global-cli.js';
+
+export type { ClaudePermissionResult } from './claude-permissions.js';
+export type { GlobalCLIResult, SkillPackageManager } from './global-cli.js';
 
 export interface InstallSkillOptions {
   cwd?: string;
   directory?: string;
+  /** Install to Claude's project skill directory unless directory is provided. */
+  claude?: boolean;
+  /** Install the global CLI dependency and allow its commands in local Claude settings. Requires claude. */
+  allowClaudeCommands?: boolean;
+  /** Override npm/pnpm selection when installing the global command dependency. */
+  packageManager?: SkillPackageManager;
 }
 
 export interface InstallSkillResult {
   path: string;
   installed: boolean;
+  claudePermissions?: ClaudePermissionResult;
+  globalCLI?: GlobalCLIResult;
 }
 
 /** Return the absolute path of the skill shipped with this package. */
 export function getSkillPath(): string {
   return fileURLToPath(new URL('../../skills/playground-upload', import.meta.url));
-}
-
-function errorCode(error: unknown): unknown {
-  return error instanceof Error && 'code' in error ? error.code : undefined;
-}
-
-async function ensureDirectory(directory: string): Promise<void> {
-  const parent = path.dirname(directory);
-  if (parent !== directory) await ensureDirectory(parent);
-
-  let info;
-  try {
-    info = await lstat(directory);
-  } catch (error) {
-    if (errorCode(error) !== 'ENOENT') throw error;
-    try {
-      await mkdir(directory);
-    } catch (mkdirError) {
-      if (errorCode(mkdirError) !== 'EEXIST') throw mkdirError;
-    }
-    info = await lstat(directory);
-  }
-  if (info.isSymbolicLink()) {
-    throw new Error(`Refusing to install through a symbolic link: ${directory}`);
-  }
-  if (!info.isDirectory()) {
-    throw new Error(`Skill destination ancestor is not a directory: ${directory}`);
-  }
 }
 
 async function existingMatches(filename: string, contents: Buffer): Promise<void> {
@@ -60,16 +49,7 @@ async function existingMatches(filename: string, contents: Buffer): Promise<void
   }
 }
 
-/** Install the skill explicitly; preserve an existing skill's local edits. */
-export async function installSkill({
-  cwd = process.cwd(),
-  directory,
-}: InstallSkillOptions = {}): Promise<InstallSkillResult> {
-  if (directory !== undefined && (typeof directory !== 'string' || !directory.trim())) {
-    throw new TypeError('directory must be a non-empty path to the skill folder');
-  }
-  const destination = path.resolve(cwd, directory ?? '.agents/skills/playground-upload');
-  const contents = await readFile(path.join(getSkillPath(), 'SKILL.md'));
+async function copySkill(destination: string, contents: Buffer): Promise<boolean> {
   await ensureDirectory(destination);
   const filename = path.join(destination, 'SKILL.md');
 
@@ -83,12 +63,55 @@ export async function installSkill({
   } catch (error) {
     if (errorCode(error) !== 'EEXIST' && errorCode(error) !== 'ELOOP') throw error;
     await existingMatches(filename, contents);
-    return { path: destination, installed: false };
+    return false;
   }
   try {
     await handle.writeFile(contents);
   } finally {
     await handle.close();
   }
-  return { path: destination, installed: true };
+  return true;
+}
+
+/** Install the skill; Claude permission setup also ensures its global CLI dependency. */
+export async function installSkill({
+  cwd = process.cwd(),
+  directory,
+  claude = false,
+  allowClaudeCommands = false,
+  packageManager,
+}: InstallSkillOptions = {}): Promise<InstallSkillResult> {
+  if (directory !== undefined && (typeof directory !== 'string' || !directory.trim())) {
+    throw new TypeError('directory must be a non-empty path to the skill folder');
+  }
+  if (typeof claude !== 'boolean' || typeof allowClaudeCommands !== 'boolean') {
+    throw new TypeError('claude and allowClaudeCommands must be booleans');
+  }
+  if (allowClaudeCommands && !claude) {
+    throw new TypeError('allowClaudeCommands requires claude: true');
+  }
+  if (packageManager !== undefined && packageManager !== 'npm' && packageManager !== 'pnpm') {
+    throw new TypeError('packageManager must be npm or pnpm');
+  }
+  if (packageManager !== undefined && !allowClaudeCommands) {
+    throw new TypeError('packageManager requires allowClaudeCommands: true');
+  }
+
+  const root = path.resolve(cwd);
+  const defaultDirectory = claude
+    ? '.claude/skills/playground-upload'
+    : '.agents/skills/playground-upload';
+  const destination = path.resolve(root, directory ?? defaultDirectory);
+  // Validate settings before writing the skill; do not grant permissions if copying fails.
+  const permissionPlan = allowClaudeCommands
+    ? await prepareClaudeCommandPermission(root)
+    : undefined;
+  const contents = await readFile(path.join(getSkillPath(), 'SKILL.md'));
+  const installed = await copySkill(destination, contents);
+  const result: InstallSkillResult = { path: destination, installed };
+  if (permissionPlan) {
+    result.globalCLI = await ensureGlobalCLI(packageManager);
+    result.claudePermissions = await permissionPlan.apply();
+  }
+  return result;
 }
