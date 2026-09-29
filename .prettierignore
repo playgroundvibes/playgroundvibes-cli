@@ -1,0 +1,7 @@
+# Generated output and dependencies have their own formatting.
+node_modules/
+dist/
+coverage/
+*.tgz
+package-lock.json
+pnpm-lock.yaml

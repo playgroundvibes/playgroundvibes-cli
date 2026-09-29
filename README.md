@@ -1,0 +1,216 @@
+# @playgroundvibes/cli
+
+Publish a reviewed project to [Playground Vibes](https://playgroundvibes.com/). The CLI and API are written in strict TypeScript, compiled to JavaScript for npm, and run on Node.js 22+. Python is not required.
+
+The CLI uses the owner's pairing and upload protocol. It scans selected files locally, shows the complete upload review, and requires explicit consent before any project content is posted. Completed uploads publish the listing and browser preview immediately. Selected source is sent to Playground; source download and remix permissions remain separate.
+
+The service keeps private Git history and can automatically improve supported browser projects. A later local deployment replaces those server changes. Backend processes and databases are not deployed by this CLI. See [server compatibility](docs/server-compatibility.md) for the verified request contract and deliberate client-side restrictions.
+
+## Where to read the code
+
+Start with [the filtering guide](docs/filtering.md) to see what is excluded, what blocks publication, and where each rule lives. Policy tables use named rules and file formats; the review identifies the rule and ignore-file location behind each exclusion.
+
+| Source module                                                  | Responsibility                                                                                                 |
+| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
+| [src/client.ts](src/client.ts)                                 | Public client; connects preparation, consent, and deployment.                                                  |
+| [src/filtering/](src/filtering/)                               | Path exclusions, allowed text files, named binary signatures, secret patterns, and encoded-content inspection. |
+| [src/project/](src/project/)                                   | Manifest loading, metadata validation, URL policy, and saved project identity.                                 |
+| [src/artifacts/pack-project.ts](src/artifacts/pack-project.ts) | Deterministic ZIP creation from the bytes already inspected.                                                   |
+| [src/publishing/](src/publishing/)                             | Immutable reviews, consent digests, request splitting, retries, and completion validation.                     |
+| [src/auth/](src/auth/)                                         | Pairing and verified account access; public results omit credentials.                                          |
+| [src/api/transport.ts](src/api/transport.ts)                   | Bounded requests to the fixed service endpoints.                                                               |
+| [src/storage/local-state.ts](src/storage/local-state.ts)       | Private credentials, atomic JSON writes, and command locks.                                                    |
+| [src/cli/](src/cli/)                                           | Argument parsing, command dispatch, review output, and interactive consent.                                    |
+| [src/skills/install.ts](src/skills/install.ts)                 | Explicit installation of the bundled skill.                                                                    |
+
+The flow is `load project → validate metadata → collect and inspect files → archive inspected bytes → review → consent → upload`. Only the final step sends project content. Authentication requests happen when connecting or preparing an account-bound review.
+
+## Install and develop
+
+After npm publication:
+
+```sh
+npm install -g @playgroundvibes/cli
+playgroundvibes --help
+```
+
+From a fresh checkout, use Node.js 22+ and the pinned pnpm version, 12.4.2:
+
+If pnpm is not installed, run `npm install --global pnpm@12.4.2` first.
+
+```sh
+pnpm install --frozen-lockfile --ignore-scripts
+pnpm run build
+pnpm start --help
+pnpm run check
+pnpm pack
+```
+
+Or use npm:
+
+```sh
+npm ci --ignore-scripts
+npm run build
+npm start -- --help
+npm test
+npm pack
+```
+
+Both installs work without an existing `dist/` directory. Build and verification scripts invoke local tools through Node; pnpm does not call npm internally. Keep optional dependencies enabled: TypeScript includes its platform-specific compiler in an optional dependency. Dependency install scripts are not needed.
+
+Commit both `package-lock.json` and `pnpm-lock.yaml`. When changing dependencies, update the npm lockfile with `npm install --package-lock-only --ignore-scripts`, then regenerate the pnpm lockfile with `pnpm import`. CI uses frozen installs to catch stale lockfiles. Avoid switching managers in the same `node_modules`; use a fresh checkout when verifying the other manager.
+
+## Build quality checks
+
+`pnpm run check` and `npm run check` run the same quality gate used by GitHub Actions. It checks formatting, compiles the strict TypeScript source, checks public API declarations, runs the offline test suite, and validates the compiled package's files and exports.
+
+```sh
+npm run format        # Apply the project's pinned Prettier formatting
+npm run format:check  # Check formatting without changing files
+npm run check         # Run all quality checks
+```
+
+Formatting covers source, tests, scripts, JSON, Markdown, and GitHub workflow YAML. Generated output, dependencies, and both generated lockfiles are excluded. Git attributes keep checked-out text files on LF line endings across operating systems.
+
+`pnpm run build` and `npm run build` refuse unformatted source before compiling. Packing or normally publishing from this checkout with either manager runs the full quality gate through `prepack`. The lower-level `test:unit`, `test:types`, and `check:package` commands use an existing build; prefer `pnpm run check` or `npm run check` for complete validation.
+
+GitHub runs fresh npm and pnpm installs on every branch push and pull request, across Linux, macOS, and Windows with Node 22 and 24. Release tags reuse the same workflow. The publishing job requires all 12 jobs to succeed, then checks and packs the release before publishing that exact tarball with OIDC. These workflows start running once committed and pushed to GitHub.
+
+Only compiled `dist/**/*.js`, generated `.d.ts` declarations, the skill, examples, and documentation ship in the package. TypeScript source, tests, compiler, and Python helpers do not ship as runtime code. Builds clear `dist/` first so moved or deleted modules cannot linger in the package.
+
+## Connect your account
+
+```sh
+playgroundvibes login
+playgroundvibes connect ABCD2345
+playgroundvibes whoami
+```
+
+Replace the example with the eight-character pairing code generated on Playground. `login --no-browser` prints the website URL. Credentials are stored outside projects with private permissions. Use `playgroundvibes logout` to revoke this computer's connection.
+
+The default configuration directory is `~/.config/playground-vibes/cli` on macOS/Linux; `XDG_CONFIG_HOME` is respected. Windows uses `LOCALAPPDATA`, falling back to the home directory. Override with `PLAYGROUND_CONFIG_DIR` or `--config-dir DIR`. The directory must stay outside the project being uploaded.
+
+## Prepare and review a project
+
+From the project root, create `.playground/manifest.json`:
+
+```json
+{
+  "title": "My app",
+  "summary": "What this app does.",
+  "source_dir": "..",
+  "build_dir": "../dist",
+  "license": "All rights reserved",
+  "remix": false
+}
+```
+
+Paths are relative to `.playground/`; `source_dir` must select the current project. Build the app with its documented command first. The CLI never executes project build scripts. Browser output needs `index.html` at its root. Omit `build_dir` for source-only publication. See [examples/manifest.json](examples/manifest.json) for other basic fields.
+
+```sh
+playgroundvibes deploy --dry-run
+playgroundvibes deploy
+```
+
+Dry-run is offline and writes no identity or credentials. Deployment first shows the account, destination, final metadata, source/build file list with sizes and hashes, exclusions, and publication consequences. In an interactive terminal, type **PUBLISH** to approve. Refusal or EOF cancels. The upload uses the exact inspected byte snapshot; it never silently adds files changed after review.
+
+For an agent or other noninteractive caller:
+
+1. Run `playgroundvibes deploy --json`. It returns a complete account-bound review and exits with a consent-required error, without uploading.
+2. Show that review to the user and obtain approval for its destination, selected files, and publication consequences.
+3. Run `playgroundvibes deploy --json --consent REVIEW_DIGEST` with the approved digest.
+
+`--consent` is an acknowledgement of that review, not a secret or proof of who approved it. The caller must obtain real consent. There is no `--yes` or scanner bypass. New preparations with changed content, metadata, account, or project produce a different digest. An offline dry-run digest cannot authorize a deployment because it is not bound to an account.
+
+`--json` emits newline-delimited events: `review`, then `result` or `error`. A review alone is never upload success. The final result contains the actual project URL and preview status. A linked `.playground/project.json` preserves project identity and can be committed; interrupted operations reuse their saved identity and operation ID.
+
+## Secret filtering and its limits
+
+No tool can guarantee the absence of every possible secret. This implementation guarantees that every transmitted source/build file and final metadata value passes the configured inspection pipeline and that deployment requires matching consent.
+
+- Mandatory exclusions remove credentials and private settings, `.env` variants, Git history, dependency/cache directories, common chat/user exports, private-key files, and source maps. Reports explain exclusions.
+- Source honors nested `.gitignore`; `.playgroundignore` applies to both source and build. Explicit browser output is scanned even if Git ignores it.
+- A fixed Secretlint recommended ruleset and supplementary checks detect common provider credentials, private keys, credential assignments, authorization strings, and credential-bearing URLs. Project scanner configuration and inline suppression comments cannot disable them.
+- The scanner inspects recognized Unicode/hex escapes, HTML entities, percent encoding, base64, and nested encoded text within bounded limits. Findings report path, line, and rule, without matched secret values.
+- Findings, invalid encoding, scanner errors, exceeded inspection limits, unsupported files, and opaque binary content block the entire upload. Source files are never edited or automatically redacted.
+
+**Current restriction:** only supported UTF-8 text files are accepted. Archives, databases, executables, images, fonts, WASM, other binary assets, binary data URIs, and `cover_file` are blocked. This release does not pretend those files were inspected. Remove them or explicitly exclude them in `.playgroundignore`; excluding a required asset can break the preview, so verify the resulting app. A future media sanitizer can extend this policy without weakening it silently.
+
+Source inspection is limited to 4 MiB per file, 50 MiB total, and 2,000 files. Browser builds allow 3 MiB per file, 10 MiB total, and 150 files. Each compressed ZIP is limited to 10 MiB. Some benign credential-like strings will be flagged; change or exclude them deliberately and review again. Human review remains necessary for personal data, proprietary content, and secrets the rules cannot recognize.
+
+## JavaScript / TypeScript API
+
+Exports are explicit; there are no wildcard exports of implementation modules.
+
+| Import                           | Exports                                                                                                                 |
+| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
+| `@playgroundvibes/cli`           | `createPlaygroundClient`, `ConsentError`, `ScanError`, skill helpers, and public client/project/result types.           |
+| `@playgroundvibes/cli/filtering` | `scanText`, `ScanError`, and readonly tables for exclusions, supported files, binary signatures, and inspection limits. |
+| `@playgroundvibes/cli/skills`    | `getSkillPath`, `installSkill`, `InstallSkillOptions`, and `InstallSkillResult`.                                        |
+
+`PlaygroundClient`, `Review`, `ProjectMetadata`, `Manifest`, `ConnectionInfo`, `DeploymentConsent`, and `DeploymentResult` are named interfaces. Reviews and their nested fields are readonly in TypeScript and frozen at runtime. Account and deployment results expose validated fields rather than arbitrary server response dictionaries.
+
+```ts
+import { createPlaygroundClient } from '@playgroundvibes/cli';
+
+const client = createPlaygroundClient({ cwd: '/absolute/path/to/project' });
+const review = await client.prepare();
+// Display review and obtain the user's approval in your application's UI.
+const userApproved = await showPublicationConsent(review);
+if (userApproved) {
+  const result = await client.deploy(review, { consent: review.digest });
+  console.log(result.url);
+}
+```
+
+`showPublicationConsent` represents your application's consent UI; the package does not supply it. `inspect()` produces an offline review; `prepare()` verifies account access and returns an immutable review backed by a private in-memory snapshot. Only a review from that client instance, with its matching digest, can be deployed. Importing the API does not connect or publish. Auth methods are `connect(code)`, `whoami()`, and `logout()`; `loginUrl` provides the pairing page. `configDir` can be overridden for embedding and tests.
+
+To inspect the configured rules or check a single piece of text locally:
+
+```ts
+import { BUILT_IN_EXCLUSIONS, BINARY_SIGNATURES, scanText } from '@playgroundvibes/cli/filtering';
+
+console.table(BUILT_IN_EXCLUSIONS.map(({ id, reason }) => ({ id, reason })));
+console.table(BINARY_SIGNATURES.map(({ format, parts }) => ({ format, parts })));
+await scanText('export const greeting = "hello";', 'src/main.ts');
+```
+
+`scanText` resolves when the configured text checks pass and throws `ScanError` with safe path/line/rule findings when they fail. It is not a project approval: full preparation also checks paths, file types, ignore rules, metadata, and artifact limits. Exported policy tables are descriptive and immutable; they cannot disable deployment checks.
+
+## Agent skill
+
+```sh
+playgroundvibes skill install
+playgroundvibes skill install --path .claude/skills/playground-upload
+playgroundvibes skill path
+```
+
+Default destination: `.agents/skills/playground-upload/SKILL.md` in the current project. Installation is explicit and preserves existing edits. `getSkillPath()` and `installSkill({ cwd, directory })` are also exported. Installing the npm package or skill never authorizes publication.
+
+## npm releases
+
+The GitHub repository is `playgroundvibes/playgroundvibes-cli`; the npm package remains `@playgroundvibes/cli`. The intended npm account is **playgroundvibesapp**, which must have publishing access to the `@playgroundvibes` scope. Account name and package scope are separate.
+
+The publishing workflow runs on pushed `v*` tags, verifies the tag matches `package.json`, waits for cross-platform tests, compiles JavaScript, and publishes the tarball using npm trusted publishing. Stable versions use `latest`; prereleases use `next`. No long-lived npm token is stored in GitHub.
+
+One-time setup (not yet completed): sign in to npm as `playgroundvibesapp`, verify scope access and choose the license (currently `UNLICENSED`), publish the initial package, then configure this trusted publisher:
+
+```sh
+npm login --auth-type=web --registry=https://registry.npmjs.org/
+npm whoami --registry=https://registry.npmjs.org/
+# Verify the printed account is playgroundvibesapp before publishing.
+npm publish --access public --registry=https://registry.npmjs.org/
+npm trust github @playgroundvibes/cli \
+  --file publish.yml \
+  --repository playgroundvibes/playgroundvibes-cli \
+  --allow-publish \
+  --registry=https://registry.npmjs.org/
+```
+
+The trust command needs npm 11.15+, account 2FA, and write access to an existing package. Use browser login; bypass-2FA granular tokens and legacy basic authentication cannot configure trust. `--allow-publish` enables direct publishing instead of only staged releases. See [npm trusted publishing](https://docs.npmjs.com/trusted-publishers/) and [npm trust](https://docs.npmjs.com/cli/v12/commands/npm-trust/).
+
+If trust setup returns `403`, first check `npm whoami --registry=https://registry.npmjs.org/` prints `playgroundvibesapp`. The package must be published and this account must have write access before retrying trust setup. A `404` from `npm view @playgroundvibes/cli --registry=https://registry.npmjs.org/` can mean the package is unpublished or the signed-in account cannot access it; it does not prove the package is available. The timer warning is separate from the registry rejection.
+
+Once setup and repository changes are live, release a new version with `npm version patch` (or an explicit prerelease version), then push the commit and its version tag. Each tag must match the package version exactly. Do not tag the already bootstrapped version for publication again.
+
+Tests are offline: scanners use synthetic secrets, and deployment requests are mocked. Live pairing and publication still require service validation. See [NOTICE.md](NOTICE.md) for source/dependency attribution.

@@ -1,0 +1,45 @@
+name: Publish to npm
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-publish
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
+        with:
+          node-version: '24'
+          registry-url: 'https://registry.npmjs.org/'
+          package-manager-cache: false
+      - name: Use npm with trusted publishing support
+        run: npm install --global npm@11.16.0 --registry=https://registry.npmjs.org/
+      - name: Verify release tag and select npm dist-tag
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.ref_name }}
+        run: node scripts/release-info.js
+      - run: npm ci --ignore-scripts
+      - name: Check and pack JavaScript release
+        run: npm pack
+      - name: Publish reviewed version using npm OIDC
+        env:
+          PACKAGE_FILE: ${{ steps.release.outputs.file }}
+          NPM_DIST_TAG: ${{ steps.release.outputs.tag }}
+        run: npm publish "$PACKAGE_FILE" --access public --tag "$NPM_DIST_TAG" --registry=https://registry.npmjs.org/

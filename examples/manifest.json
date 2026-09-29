@@ -1,0 +1,11 @@
+{
+  "title": "My project",
+  "summary": "Replace this with a factual summary of your project.",
+  "description": "Replace this with setup instructions and known limitations.",
+  "category": "Tools",
+  "tags": [],
+  "license": "All rights reserved",
+  "remix": false,
+  "source_dir": "..",
+  "build_dir": "../dist"
+}
