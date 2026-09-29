@@ -1,4 +1,5 @@
 import { ORIGIN } from '../api/transport.js';
+import { inspectCover, type CoverPayload } from '../artifacts/inspect-cover.js';
 import { packProject } from '../artifacts/pack-project.js';
 import { scanText } from '../filtering/scan-text.js';
 import { loadProject } from '../project/load-project.js';
@@ -14,11 +15,13 @@ export const PUBLICATION_NOTICE =
 export interface ArtifactHashes {
   readonly source: string;
   readonly build?: string;
+  readonly cover?: string;
 }
 
 export interface UploadEntry extends ProjectMetadata {
   readonly source: string;
   readonly build?: string;
+  readonly cover?: CoverPayload;
 }
 
 /** Private payload; only the review is returned to callers. */
@@ -48,6 +51,7 @@ export async function prepareUpload(
     'upload destination',
   );
 
+  const cover = project.coverPath ? await inspectCover(root, project.coverPath) : undefined;
   const source = await packProject(root);
   const build = project.buildRoot
     ? await packProject(project.buildRoot, { build: true, projectRoot: root })
@@ -55,20 +59,24 @@ export async function prepareUpload(
   const files: ReviewFile[] = [
     ...source.files.map((file) => ({ artifact: 'source' as const, ...file })),
     ...(build?.files.map((file) => ({ artifact: 'build' as const, ...file })) ?? []),
+    ...(cover ? [{ artifact: 'cover' as const, ...cover.file }] : []),
   ];
   const entry: UploadEntry = {
     ...metadata,
     source: source.data,
     ...(build ? { build: build.data } : {}),
+    ...(cover ? { cover: cover.payload } : {}),
   };
   const hashes: ArtifactHashes = {
     source: sha256(source.data),
     ...(build ? { build: sha256(build.data) } : {}),
+    ...(cover ? { cover: sha256(cover.payload.data) } : {}),
   };
   const warnings = [
-    'Secret scanning reduces risk; it cannot prove that every possible secret or private detail is absent. Review all selected files and metadata.',
+    'Credential checks match literal patterns in each file’s UTF-8 representation; encoded values and compressed content are not inspected. Review all selected files and metadata before publishing.',
   ];
-  if (!build) warnings.push('Source only: no browser preview will be uploaded.');
+  if (!build)
+    warnings.push('Source only: explicitly selected; no browser preview will be uploaded.');
   if (!manifest.date && !identity?.date)
     warnings.push('No original date supplied; the current date is used.');
 
@@ -100,7 +108,7 @@ export async function prepareUpload(
       ...source.skipped.map((file) => ({ artifact: 'source' as const, ...file })),
       ...(build?.skipped.map((file) => ({ artifact: 'build' as const, ...file })) ?? []),
     ],
-    bytes: source.bytes + (build?.bytes ?? 0),
+    bytes: source.bytes + (build?.bytes ?? 0) + (cover?.file.bytes ?? 0),
     warnings,
     publication: PUBLICATION_NOTICE,
   });

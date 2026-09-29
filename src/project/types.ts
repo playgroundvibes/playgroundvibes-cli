@@ -75,7 +75,10 @@ export interface Manifest {
   readonly source_id?: string;
   readonly date?: string;
   readonly source_dir?: string;
+  /** Browser output relative to .playground/; omitted paths are detected in dist, build, or out. */
   readonly build_dir?: string;
+  /** Explicitly publish without a browser build. Cannot be combined with build_dir. */
+  readonly source_only?: boolean;
   readonly cover_file?: string;
 }
 

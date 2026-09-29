@@ -5,7 +5,7 @@ import {
   type FileExclusion,
   type FileSummary,
 } from '../filtering/collect-files.js';
-import { INSPECTION_LIMITS } from '../filtering/file-types.js';
+import { INSPECTION_LIMITS } from '../filtering/limits.js';
 
 export interface PackResult {
   data: string;

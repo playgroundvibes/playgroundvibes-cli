@@ -4,12 +4,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { createHash } from 'node:crypto';
-import { zipSync, unzipSync } from 'fflate';
+import { unzipSync } from 'fflate';
 import { packProject as pack } from '../dist/artifacts/pack-project.js';
 import { resolveProjectPath as within } from '../dist/filtering/collect-files.js';
-import { scanText, ScanError } from '../dist/filtering/index.js';
-import { MIB } from '../dist/filtering/file-types.js';
-import { identifyBinaryFormat } from '../dist/filtering/binary-signatures.js';
+import { inspectFileContents } from '../dist/filtering/inspect-file.js';
+import { scanText, ScanError, CREDENTIAL_PATTERNS } from '../dist/filtering/index.js';
+import { MIB } from '../dist/filtering/limits.js';
 
 async function fixture(t) {
   const root = await fs.realpath(await fs.mkdtemp(path.join(os.tmpdir(), 'playground-files-')));
@@ -25,7 +25,14 @@ const safeFailure = (value) => (error) => {
   return true;
 };
 
-test('TypeScript source packaging is deterministic and reports exact ZIP bytes and exclusions', async (t) => {
+// Independent fixture copied from the supplied bundle's src/policy.mjs hasSecret.
+// Keep this combined expression separate from the package's named pattern table.
+const originalHasSecret = (content) =>
+  /-----BEGIN (?:[A-Z0-9 ]*PRIVATE KEY)-----|\b(?:pgimport_[a-f0-9]{64}|pgsync_[a-f0-9]{64}|sk-(?:proj-|ant-api\d+-|ant-)?[A-Za-z0-9_-]{20,}|gh[pousr]_[A-Za-z0-9]{24,}|github_pat_[A-Za-z0-9_]{24,}|(?:AKIA|ASIA)[A-Z0-9]{16}|xox[baprs]-[A-Za-z0-9-]{20,})\b/.test(
+    content,
+  );
+
+test('source packaging is deterministic and reports exact ZIP bytes and exclusions', async (t) => {
   const root = await fixture(t);
   await fs.mkdir(path.join(root, 'src'));
   await fs.mkdir(path.join(root, 'node_modules'));
@@ -52,14 +59,12 @@ test('TypeScript source packaging is deterministic and reports exact ZIP bytes a
     b = await pack(root);
   assert.equal(a.data, b.data);
   const names = a.files.map((file) => file.path);
-  assert(names.includes('src/main.ts'));
+  for (const name of ['src/main.ts', '.envrc', '.git-credentials']) assert(names.includes(name));
   for (const name of [
     'src/ignored.ts',
     'test.tmp',
     '.env',
     '.env.example',
-    '.envrc',
-    '.git-credentials',
     'node_modules/lib.js',
     'dist/index.html',
   ])
@@ -77,33 +82,36 @@ test('TypeScript source packaging is deterministic and reports exact ZIP bytes a
   );
 });
 
-test('custom exclusions affect source and build; source maps are excluded with reasons', async (t) => {
+test('custom exclusions affect source and build, while source maps use the normal content check', async (t) => {
   const root = await fixture(t);
   await fs.mkdir(path.join(root, 'dist'));
   await fs.writeFile(path.join(root, 'main.ts'), 'export {};');
-  await fs.writeFile(path.join(root, 'private.txt'), 'private');
+  await fs.writeFile(path.join(root, 'private.txt'), fakeToken());
   await fs.writeFile(path.join(root, '.playgroundignore'), 'private.txt\ndist/private.json\n');
   await fs.writeFile(path.join(root, 'dist/index.html'), '<h1>App</h1>');
-  await fs.writeFile(path.join(root, 'dist/private.json'), '{}');
+  await fs.writeFile(path.join(root, 'dist/private.json'), fakeToken());
   await fs.writeFile(
     path.join(root, 'dist/main.js.map'),
-    JSON.stringify({ sourcesContent: [fakeToken()] }),
+    JSON.stringify({ sourcesContent: ['hello'] }),
   );
   assert(!(await pack(root)).files.some((file) => file.path === 'private.txt'));
   const build = await pack(path.join(root, 'dist'), { build: true, projectRoot: root });
   assert.deepEqual(
     build.files.map((file) => file.path),
-    ['index.html'],
-  );
-  assert(
-    build.skipped.some(
-      (file) => file.path === 'dist/main.js.map' && /source maps/.test(file.reason),
-    ),
+    ['index.html', 'main.js.map'],
   );
   assert(
     build.skipped.some(
       (file) => file.path === 'dist/private.json' && file.reason === '.playgroundignore',
     ),
+  );
+  await fs.writeFile(
+    path.join(root, 'dist/main.js.map'),
+    JSON.stringify({ sourcesContent: [fakeToken()] }),
+  );
+  await assert.rejects(
+    pack(path.join(root, 'dist'), { build: true, projectRoot: root }),
+    safeFailure(fakeToken()),
   );
 });
 
@@ -176,152 +184,147 @@ test('exclusion reports identify the built-in rule or exact ignore file and line
   );
 });
 
-test('binary format identification distinguishes TAR offsets and RIFF subtypes', () => {
-  const tar = Buffer.alloc(512);
-  tar.write('ustar', 257);
-  assert.equal(identifyBinaryFormat(tar), 'TAR archive');
-  assert.equal(identifyBinaryFormat(Buffer.from('ustar')), undefined);
-  assert.equal(identifyBinaryFormat(Buffer.from('RIFF1234WEBP')), 'WebP image');
-  assert.equal(identifyBinaryFormat(Buffer.from('RIFF1234WAVE')), 'WAVE audio');
-  assert.equal(identifyBinaryFormat(Buffer.from('RIFF1234TEXT')), undefined);
+test('credential checks match the supplied bundle patterns and word boundaries', async () => {
+  const tokens = [
+    'pgimport_' + 'a'.repeat(64),
+    'pgsync_' + 'b'.repeat(64),
+    'sk-' + 'a'.repeat(20),
+    'sk-proj-' + 'a'.repeat(20),
+    'sk-ant-' + 'a'.repeat(20),
+    'sk-ant-api03-' + 'a'.repeat(20),
+    ...[...'pousr'].map((letter) => 'gh' + letter + '_' + 'a'.repeat(24)),
+    'github_pat_' + 'a_'.repeat(12),
+    'AKIA' + 'A1'.repeat(8),
+    'ASIA' + 'A1'.repeat(8),
+    ...[...'baprs'].map((letter) => 'xox' + letter + '-' + 'a1'.repeat(10)),
+    '-----BEGIN ' + 'PRIVATE KEY-----',
+    '-----BEGIN ' + 'RSA PRIVATE KEY-----',
+    '-----BEGIN ' + 'OPENSSH PRIVATE KEY-----',
+  ];
+  const samples = tokens.flatMap((token) => [
+    token,
+    `before\n${token}\nafter`,
+    'x' + token,
+    '_' + token,
+    token + '_',
+    token + '-',
+    token.slice(0, -1),
+    token.toUpperCase(),
+  ]);
+  samples.push(
+    'pgimport_' + 'A'.repeat(64),
+    'pgsync_' + 'a'.repeat(65),
+    'ghq_' + 'a'.repeat(40),
+    'xoxz-' + 'a'.repeat(40),
+    '-----BEGIN PUBLIC KEY-----',
+    '-----begin PRIVATE KEY-----',
+    'plain text',
+  );
+  for (const [index, content] of samples.entries()) {
+    const expected = originalHasSecret(content);
+    assert.equal(
+      CREDENTIAL_PATTERNS.some(({ pattern }) => new RegExp(pattern).test(content)),
+      expected,
+      `pattern fixture ${index}`,
+    );
+    if (expected) await assert.rejects(scanText(content, 'fixture.txt'), ScanError);
+    else await scanText(content, 'fixture.txt');
+  }
+  assert(Object.isFrozen(CREDENTIAL_PATTERNS));
+  assert(CREDENTIAL_PATTERNS.every(Object.isFrozen));
 });
 
-test('provider tokens, generic assignments, URL credentials, and metadata are blocked without values', async () => {
+test('known raw credentials report locations without their matched values', async () => {
   const token = fakeToken();
+  await assert.rejects(
+    scanText(`const title = 'app';\nconst value = '${token}';`, 'main.ts'),
+    (error) => {
+      safeFailure(token)(error);
+      assert.deepEqual(error.findings, [
+        { path: 'main.ts', line: 2, rule: 'credential/provider-token' },
+      ]);
+      return true;
+    },
+  );
+  await assert.rejects(
+    scanText(JSON.stringify({ source_id: token }), 'project metadata'),
+    safeFailure(token),
+  );
+});
+
+test('generic assignments, URL values, and additional provider formats remain allowed', async () => {
   for (const content of [
-    token,
     'const apiKey = "opaque-local-test-value";',
     'PASSWORD=opaque-local-test-value',
+    'password: opaque-local-test-value',
     'https://example.test/?api_key=opaque-local-test-value',
     'https://person:opaque-local-test-value@example.test',
-    JSON.stringify({ source_id: token }),
+    'Authorization: Bearer opaque-local-test-value',
+    'npm_' + 'a'.repeat(40),
+    'AIza' + 'a'.repeat(40),
+    'sk_live_' + 'aB3'.repeat(12),
+    'eyJ' + 'a'.repeat(10) + '.' + 'a'.repeat(10) + '.' + 'a'.repeat(10),
+    'const token = process.env.API_KEY;',
+    'token: "${{ secrets.NPM_TOKEN }}"',
   ]) {
-    await assert.rejects(
-      scanText(content, 'project metadata'),
-      safeFailure(content.includes(token) ? token : 'opaque-local-test-value'),
-    );
+    assert.equal(originalHasSecret(content), false);
+    await scanText(content, 'config.yaml');
   }
 });
 
-test('fixed Secretlint rules cannot be suppressed by inline comments or repository configuration', async (t) => {
-  const root = await fixture(t);
-  await fs.writeFile(path.join(root, '.secretlintrc.json'), JSON.stringify({ rules: [] }));
-  // Stripe is supplied by Secretlint, not by the supplementary provider regex.
-  const token = 'sk_live_' + 'aB3'.repeat(12);
-  await fs.writeFile(path.join(root, 'main.ts'), '// secretlint-disable\n// ' + token);
-  await assert.rejects(pack(root), (error) => {
-    safeFailure(token)(error);
-    assert(error.findings.some((finding) => finding.rule === '@secretlint/secretlint-rule-stripe'));
-    return true;
-  });
-});
-
-test('Unicode, hex, percent, base64, and nested base64 tokens are inspected', async () => {
+test('encoded strings and control characters are not decoded or rejected by the original policy', async () => {
   const token = fakeToken();
   const forms = [
     [...token].map((c) => '\\u' + c.charCodeAt(0).toString(16).padStart(4, '0')).join(''),
+    [...token].map((c) => '\\x' + c.charCodeAt(0).toString(16)).join(''),
     Buffer.from(token).toString('hex'),
     [...token].map((c) => '%' + c.charCodeAt(0).toString(16)).join(''),
     [...token].map((c) => '&#' + c.charCodeAt(0) + ';').join(''),
     Buffer.from(token).toString('base64'),
     Buffer.from(Buffer.from(token).toString('base64')).toString('base64'),
+    Buffer.from(token, 'utf16le').toString('utf8'),
+    String.raw`metadata %FF%AB%81 \\u{110000} &#x110000;`,
+    'raw\0control\x01characters',
   ];
   for (const form of forms) {
-    await assert.rejects(scanText(`const encoded = '${form}';`, 'main.ts'), safeFailure(token));
+    assert.equal(originalHasSecret(form), false);
+    await scanText(`const data = '${form}';`, 'main.ts');
   }
+  await scanText('a'.repeat(4 * MIB + 1), 'large.ts');
 });
 
-test('plain config credentials block while runtime environment references stay usable', async () => {
-  await assert.rejects(
-    scanText('password: opaque-local-test-value', 'config.yaml'),
-    safeFailure('opaque-local-test-value'),
-  );
-  await assert.rejects(
-    scanText('const OPENAI_API_KEY = "opaque-local-test-value";', 'main.ts'),
-    safeFailure('opaque-local-test-value'),
-  );
-  await scanText(
-    'const token = process.env.API_KEY; const value = Buffer.from("hello");',
-    'main.ts',
-  );
-  await scanText('token: "${{ secrets.NPM_TOKEN }}"', 'workflow.yml');
+test('all file bytes use replacement-decoded UTF-8 and remain unchanged', async () => {
+  for (const bytes of [
+    Buffer.from([0xff, 0xfe, 0xfd]),
+    Buffer.from([0x50, 0x4b, 3, 4, 0, 1, 2]),
+    Buffer.from('SQLite format 3\0data'),
+    Buffer.from('MZ\0binary payload'),
+    Buffer.from(fakeToken(), 'utf16le'),
+  ]) {
+    const original = Buffer.from(bytes);
+    assert.equal(originalHasSecret(bytes.toString('utf8')), false);
+    await inspectFileContents(bytes, 'asset.unknown');
+    assert.deepEqual(bytes, original);
+  }
+  const rawToken = Buffer.concat([
+    Buffer.from([0xff, 0, 1]),
+    Buffer.from(fakeToken()),
+    Buffer.from([0xfe]),
+  ]);
+  assert.equal(originalHasSecret(rawToken.toString('utf8')), true);
+  await assert.rejects(inspectFileContents(rawToken, 'asset.unknown'), safeFailure(fakeToken()));
 });
 
-test('archives and databases are blocked, including archives disguised as plain text', async (t) => {
-  const root = await fixture(t);
-  await fs.writeFile(path.join(root, 'main.ts'), 'export {};');
-  const archive = Buffer.from(zipSync({ '.env': Buffer.from('API_KEY=' + fakeToken()) }));
-  await fs.writeFile(path.join(root, 'backup.zip'), archive);
-  await assert.rejects(pack(root), /unsupported-file-type/);
-  await fs.rename(path.join(root, 'backup.zip'), path.join(root, 'backup.json'));
-  await assert.rejects(pack(root), /binary-or-archive/);
-  await fs.writeFile(path.join(root, 'backup.json'), Buffer.from('SQLite format 3\0data'));
-  await assert.rejects(pack(root), /binary-or-archive/);
-});
-
-test('UTF-16, malformed UTF-8, and explicit encoded binary data are blocked', async (t) => {
-  const root = await fixture(t);
-  await fs.writeFile(path.join(root, 'main.ts'), Buffer.from(fakeToken(), 'utf16le'));
-  await assert.rejects(pack(root), /binary-or-archive/);
-  await fs.writeFile(path.join(root, 'main.ts'), Buffer.from([0xff, 0xfe, 0xfd]));
-  await assert.rejects(pack(root), /binary-or-archive/);
-  await assert.rejects(
-    scanText('const image = "data:image/png;base64,AAECAwQFBgcICQ==";', 'main.ts'),
-    /encoded-binary/,
-  );
-  const encodedArchive = Buffer.from(
-    zipSync({ '.env': Buffer.from('API_KEY=' + fakeToken()) }),
-  ).toString('base64');
-  await assert.rejects(scanText(`const data = "${encodedArchive}";`, 'main.ts'), /encoded-binary/);
-  await assert.rejects(
-    scanText(Buffer.from(fakeToken(), 'utf16le').toString('base64'), 'main.ts'),
-    safeFailure(fakeToken()),
-  );
-});
-
-test('incidental source ID hashes do not become binary payloads when decoded heuristically', async () => {
-  const root = '/private/tmp/playground-skill-forward-135662/typescript-app';
-  const digest = createHash('sha256').update(root).digest('hex');
-  assert.equal(digest.slice(0, 4), '4d5a'); // Coincidentally decodes to the weak DOS magic MZ.
-  const metadata = {
-    title: 'TypeScript app',
-    summary: 'A minimal browser greeting built from TypeScript.',
-    source_id: 'cli-' + digest,
-  };
-  await scanText(JSON.stringify(metadata), 'project metadata');
-  await scanText(JSON.stringify('0'.repeat(64)), 'project metadata');
-  const encoded = Buffer.from(digest, 'hex').toString('base64');
-  await scanText(JSON.stringify({ digest: encoded }), 'project metadata');
-  // Explicit decoder operands still promise a payload and must be inspectable.
-  await assert.rejects(scanText(`atob('${encoded}')`, 'main.ts'), /encoded-binary/);
-});
-
-test('encoded binary findings report the original operand line', async () => {
-  const source = [
-    'const heading = "Browser app";',
-    'const count = 1;',
-    'const image = "data:image/png;base64,AAECAwQFBgcICQ==";',
-  ].join('\n');
-  await assert.rejects(scanText(source, 'main.ts'), (error) => {
-    assert(error instanceof ScanError);
-    assert.deepEqual(error.findings, [
-      { path: 'main.ts', line: 3, rule: 'inspection/encoded-binary' },
-    ]);
-    return true;
-  });
-});
-
-test('browser builds reject unsupported assets and scan even gitignored output', async (t) => {
+test('browser builds include opaque assets and still scan gitignored output for raw credentials', async (t) => {
   const root = await fixture(t);
   await fs.mkdir(path.join(root, 'dist'));
   await fs.writeFile(path.join(root, '.gitignore'), 'dist/');
   await fs.writeFile(path.join(root, 'dist/index.html'), '<h1>App</h1>');
-  await fs.writeFile(path.join(root, 'dist/photo.png'), Buffer.from([137, 80, 78, 71]));
-  await assert.rejects(
-    pack(path.join(root, 'dist'), { build: true, projectRoot: root }),
-    /unsupported-file-type/,
-  );
-  await fs.rm(path.join(root, 'dist/photo.png'));
+  const bytes = Buffer.from([0xff, 0xfe, 0x50, 0x4b, 3, 4, 0, 1]);
+  await fs.writeFile(path.join(root, 'dist/asset.custom'), bytes);
+  const packed = await pack(path.join(root, 'dist'), { build: true, projectRoot: root });
+  const unpacked = unzipSync(Buffer.from(packed.data, 'base64'));
+  assert.deepEqual(Buffer.from(unpacked['asset.custom']), bytes);
   await fs.writeFile(path.join(root, 'dist/main.js'), `const apiKey = '${fakeToken()}';`);
   await assert.rejects(
     pack(path.join(root, 'dist'), { build: true, projectRoot: root }),
@@ -338,24 +341,6 @@ test('symlinks cannot escape the project or select an artifact root', async (t) 
   await assert.rejects(within(root, 'outside/.ssh'), /symlink/);
   await assert.rejects(within(root, '../other'), /inside/);
   await assert.rejects(pack(path.join(root, 'outside'), { projectRoot: root }), /symlink/);
-});
-
-test('secret-bearing filenames are detected without leaking the filename', async (t) => {
-  const root = await fixture(t);
-  const token = fakeToken();
-  await fs.writeFile(path.join(root, token + '.ts'), 'export {};');
-  await assert.rejects(pack(root), (error) => {
-    safeFailure(token)(error);
-    assert(error.findings.every((finding) => finding.path === '[filename]'));
-    return true;
-  });
-});
-
-test('uninspectable size and decoding depth fail closed', async () => {
-  await assert.rejects(scanText('a'.repeat(4 * MIB + 1), 'large.ts'), /text-size-limit/);
-  let content = 'a sufficiently long text fixture without any credentials';
-  for (let i = 0; i < 7; i++) content = Buffer.from(content).toString('base64');
-  await assert.rejects(scanText(`const encoded = '${content}';`, 'nested.ts'), /decoding-limit/);
 });
 
 test('pack reads included files once and packages the inspected snapshot', async (t) => {
@@ -387,7 +372,8 @@ test('pack reads included files once and packages the inspected snapshot', async
   });
   const result = await pack(root);
   assert.equal(reads.get(path.join(root, 'main.ts')), 1);
-  assert.equal(reads.get(path.join(root, '.gitignore')), 1);
+  // As in the original uploader, ignore rules are read before selected files are inspected.
+  assert.equal(reads.get(path.join(root, '.gitignore')), 2);
   assert.equal(
     Buffer.from(unzipSync(Buffer.from(result.data, 'base64'))['main.ts']).toString(),
     originalText,

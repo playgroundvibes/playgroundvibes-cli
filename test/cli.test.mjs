@@ -206,7 +206,8 @@ test('help and package version are local and explain publication consent', async
     assert.match(result.stdout, /typing PUBLISH/);
     assert.match(result.stdout, /--consent/);
     assert.match(result.stdout, /Node\.js 22/);
-    assert.match(result.stdout, /binary\/archive/);
+    assert.match(result.stdout, /all file types/i);
+    assert.match(result.stdout, /literal credential patterns/i);
     assert.match(result.stdout, /--allow-claude-commands/);
     assert.match(result.stdout, /--package-manager npm\|pnpm/);
     assert.match(result.stdout, /same package version is installed\s+globally/);
@@ -555,6 +556,7 @@ test('real dry-run scans offline without creating configuration or uploading', a
       title: 'Offline app',
       summary: 'An offline review fixture',
       source_dir: '..',
+      source_only: true,
     }),
   );
   await writeFile(path.join(directory, 'index.html'), '<!doctype html><title>Offline app</title>');
@@ -579,15 +581,24 @@ test('real dry-run scans offline without creating configuration or uploading', a
   assert.ok(output[0].review.excluded.some((file) => file.path === '.env'));
   await assert.rejects(access(configDir), { code: 'ENOENT' });
 
-  for (const filename of ['asset.png', 'binary.txt']) {
+  for (const filename of ['data.sqlite', 'binary.txt']) {
     const asset = path.join(directory, filename);
-    await writeFile(asset, Buffer.from([0x89, 0x50, 0x4e, 0x47, 0, 0, 0, 0]));
+    await writeFile(asset, Buffer.from('SQLite format 3\0'));
+    const accepted = invoke(['--config-dir', configDir, 'deploy', '--dry-run', '--json'], {
+      cwd: directory,
+      nodeArgs: ['--import', pathToFileURL(guard).href],
+    });
+    assert.equal(accepted.status, 0, accepted.stdout || accepted.stderr);
+    assert.ok(events(accepted)[0].review.files.some((file) => file.path === filename));
+    const credential = 'sk-proj-' + 'a'.repeat(40);
+    await writeFile(asset, Buffer.from('SQLite format 3\0' + credential));
     const blocked = invoke(['--config-dir', configDir, 'deploy', '--dry-run', '--json'], {
       cwd: directory,
       nodeArgs: ['--import', pathToFileURL(guard).href],
     });
     assert.equal(blocked.status, 1, blocked.stdout);
-    assert.match(events(blocked)[0].error, /\.playgroundignore/);
+    assert.match(events(blocked)[0].error, /credential/);
+    assert.ok(!blocked.stdout.includes(credential));
     await assert.rejects(access(configDir), { code: 'ENOENT' });
     await rm(asset);
   }
@@ -639,7 +650,10 @@ test('noninteractive deployment shows the complete review but refuses to upload 
   ]) {
     assert.ok(result.stdout.includes(value), value);
   }
-  assert.match(result.stdout, /Source and any browser build files above will be sent/);
+  assert.match(
+    result.stdout,
+    /Source, browser build files, and any selected cover above will be sent/,
+  );
   assert.match(result.stderr, /Consent required\. No upload occurred/);
   assert.match(result.stderr, new RegExp(`--consent ${digest}`));
   assert.deepEqual(

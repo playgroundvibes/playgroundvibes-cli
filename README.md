@@ -10,20 +10,20 @@ The service keeps private Git history and can automatically improve supported br
 
 ## Where to read the code
 
-Start with [the filtering guide](docs/filtering.md) to see what is excluded, what blocks publication, and where each rule lives. Policy tables use named rules and file formats; the review identifies the rule and ignore-file location behind each exclusion.
+Start with [the filtering guide](docs/filtering.md) to see what is excluded, what blocks publication, and where each rule lives. Policy tables name the exclusions and literal credential patterns; the review identifies the rule and ignore-file location behind each exclusion.
 
-| Source module                                                  | Responsibility                                                                                                 |
-| -------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------- |
-| [src/client.ts](src/client.ts)                                 | Public client; connects preparation, consent, and deployment.                                                  |
-| [src/filtering/](src/filtering/)                               | Path exclusions, allowed text files, named binary signatures, secret patterns, and encoded-content inspection. |
-| [src/project/](src/project/)                                   | Manifest loading, metadata validation, URL policy, and saved project identity.                                 |
-| [src/artifacts/pack-project.ts](src/artifacts/pack-project.ts) | Deterministic ZIP creation from the bytes already inspected.                                                   |
-| [src/publishing/](src/publishing/)                             | Immutable reviews, consent digests, request splitting, retries, and completion validation.                     |
-| [src/auth/](src/auth/)                                         | Pairing and verified account access; public results omit credentials.                                          |
-| [src/api/transport.ts](src/api/transport.ts)                   | Bounded requests to the fixed service endpoints.                                                               |
-| [src/storage/local-state.ts](src/storage/local-state.ts)       | Private credentials, atomic JSON writes, and command locks.                                                    |
-| [src/cli/](src/cli/)                                           | Argument parsing, command dispatch, review output, and interactive consent.                                    |
-| [src/skills/install.ts](src/skills/install.ts)                 | Explicit installation of the bundled skill.                                                                    |
+| Source module                                                  | Responsibility                                                                             |
+| -------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| [src/client.ts](src/client.ts)                                 | Public client; connects preparation, consent, and deployment.                              |
+| [src/filtering/](src/filtering/)                               | Original bundle exclusions, literal credential patterns, and file-size limits.             |
+| [src/project/](src/project/)                                   | Manifest loading, metadata validation, URL policy, and saved project identity.             |
+| [src/artifacts/pack-project.ts](src/artifacts/pack-project.ts) | Deterministic ZIP creation from the bytes already inspected.                               |
+| [src/publishing/](src/publishing/)                             | Immutable reviews, consent digests, request splitting, retries, and completion validation. |
+| [src/auth/](src/auth/)                                         | Pairing and verified account access; public results omit credentials.                      |
+| [src/api/transport.ts](src/api/transport.ts)                   | Bounded requests to the fixed service endpoints.                                           |
+| [src/storage/local-state.ts](src/storage/local-state.ts)       | Private credentials, atomic JSON writes, and command locks.                                |
+| [src/cli/](src/cli/)                                           | Argument parsing, command dispatch, review output, and interactive consent.                |
+| [src/skills/install.ts](src/skills/install.ts)                 | Explicit installation of the bundled skill.                                                |
 
 The flow is `load project → validate metadata → collect and inspect files → archive inspected bytes → review → consent → upload`. Only the final step sends project content. Authentication requests happen when connecting or preparing an account-bound review.
 
@@ -107,14 +107,18 @@ From the project root, create `.playground/manifest.json`:
 }
 ```
 
-Paths are relative to `.playground/`; `source_dir` must select the current project. Build the app with its documented command first. The CLI never executes project build scripts. Browser output needs `index.html` at its root. Omit `build_dir` for source-only publication. See [examples/manifest.json](examples/manifest.json) for other basic fields.
+Paths are relative to `.playground/`; `source_dir` must select the current project. Build the app with its documented command first, using its package manager (for example, `pnpm run build` or `npm run build`). The CLI does not execute project build scripts. Browser output needs `index.html` at its root. See [examples/manifest.json](examples/manifest.json) for other basic fields.
+
+Without `build_dir`, the CLI detects a browser build in `dist/`, `build/`, or `out/`. Exactly one of those directories must contain `index.html`; if more than one matches, set `build_dir` to select the intended output. Custom output directories require `build_dir`. A plain static site can use `build_dir: ".."` if the project root is already browser-ready; a development entrypoint that imports TypeScript needs to be built first.
+
+Missing, invalid, or blocked builds stop the upload. They never silently fall back to source-only publication. To intentionally publish source without a browser preview, set `"source_only": true` in the manifest and remove `build_dir`. This is an explicit choice starting in 0.1.2; merely omitting `build_dir` no longer selects source-only mode. Both options are local controls and are not sent as server metadata.
 
 ```sh
 playgroundvibes deploy --dry-run
 playgroundvibes deploy
 ```
 
-Dry-run is offline and writes no identity or credentials. Deployment first shows the account, destination, final metadata, source/build file list with sizes and hashes, exclusions, and publication consequences. In an interactive terminal, type **PUBLISH** to approve. Refusal or EOF cancels. The upload uses the exact inspected byte snapshot; it never silently adds files changed after review.
+Dry-run is offline and writes no identity or credentials. Deployment first shows the account, destination, final metadata, source/build/cover file list with sizes and hashes, exclusions, and publication consequences. In an interactive terminal, type **PUBLISH** to approve. Refusal or EOF cancels. The upload uses the exact inspected byte snapshot; it never silently adds files changed after review.
 
 For an agent or other noninteractive caller:
 
@@ -128,27 +132,28 @@ For an agent or other noninteractive caller:
 
 ## Secret filtering and its limits
 
-No tool can guarantee the absence of every possible secret. This implementation guarantees that every transmitted source/build file and final metadata value passes the configured inspection pipeline and that deployment requires matching consent.
+Filtering follows the owner's original Node bundle. Every regular file format and extension is accepted, including binary assets, archives, databases, executables, and source maps, subject to the original path exclusions and size limits. Selected bytes are preserved exactly.
 
-- Mandatory exclusions remove credentials and private settings, `.env` variants, Git history, dependency/cache directories, common chat/user exports, private-key files, and source maps. Reports explain exclusions.
-- Source honors nested `.gitignore`; `.playgroundignore` applies to both source and build. Explicit browser output is scanned even if Git ignores it.
-- A fixed Secretlint recommended ruleset and supplementary checks detect common provider credentials, private keys, credential assignments, authorization strings, and credential-bearing URLs. Project scanner configuration and inline suppression comments cannot disable them.
-- The scanner inspects recognized Unicode/hex escapes, HTML entities, percent encoding, base64, and nested encoded text within bounded limits. Findings report path, line, and rule, without matched secret values.
-- Findings, invalid encoding, scanner errors, exceeded inspection limits, unsupported files, and opaque binary content block the entire upload. Source files are never edited or automatically redacted.
+- Source honors nested `.gitignore`; the root `.playgroundignore` applies to source and build. Selected browser output bypasses `.gitignore`.
+- The original mandatory exclusions cover `.env` variants, selected private settings, dependency/cache directories, private-key/log filenames, and common chat/user exports. Unsafe paths, symlinks, and nonregular entries are skipped and reported. See the [complete exclusion table](docs/filtering.md#built-in-exclusions).
+- Each selected file is checked using `Buffer.toString('utf8')` and only the original literal patterns for private-key markers and OpenAI/Anthropic, Playground, GitHub, AWS, and Slack credentials. Final metadata receives the same literal checks.
+- There is no Secretlint ruleset, generic password/credential-assignment or URL check, encoding decoder, UTF-16 extraction, archive inspection, or format validation. A matching literal credential or exceeded upload limit blocks preparation; files are never redacted or rewritten.
 
-**Current restriction:** only supported UTF-8 text files are accepted. Archives, databases, executables, images, fonts, WASM, other binary assets, binary data URIs, and `cover_file` are blocked. This release does not pretend those files were inspected. Remove them or explicitly exclude them in `.playgroundignore`; excluding a required asset can break the preview, so verify the resulting app. A future media sanitizer can extend this policy without weakening it silently.
+Credential checks match literal patterns in each file’s UTF-8 representation; encoded values and compressed content are not inspected. Review all selected files and metadata before publishing.
 
-Source inspection is limited to 4 MiB per file, 50 MiB total, and 2,000 files. Browser builds allow 3 MiB per file, 10 MiB total, and 150 files. Each compressed ZIP is limited to 10 MiB. Some benign credential-like strings will be flagged; change or exclude them deliberately and review again. Human review remains necessary for personal data, proprietary content, and secrets the rules cannot recognize.
+Optional `cover_file` selects a project-local PNG, JPEG, or WebP image up to 3 MiB, resolved relative to `.playground/`. As in the original bundle, explicit covers do not apply `.gitignore`, `.playgroundignore`, or the source/build filename exclusions. They require a regular file without symlinked paths and use the same direct UTF-8 credential checks. Covers appear separately in the review. The `tripo` provider setting uses that canonical spelling in `provider_requirements`.
+
+Source limits are 50 MiB per file, 50 MiB total, and 2,000 files. Browser builds allow 3 MiB per file, 10 MiB total, and 150 files. Each compressed ZIP is limited to 10 MiB, and each request to 16 MiB. Offline tests compare exclusions and accepted file bytes with fixtures of the original policy; they do not establish that every possible secret is detected or every uploaded format can be previewed.
 
 ## JavaScript / TypeScript API
 
 Exports are explicit; there are no wildcard exports of implementation modules.
 
-| Import                           | Exports                                                                                                                 |
-| -------------------------------- | ----------------------------------------------------------------------------------------------------------------------- |
-| `@playgroundvibes/cli`           | `createPlaygroundClient`, `ConsentError`, `ScanError`, skill helpers, and public client/project/result types.           |
-| `@playgroundvibes/cli/filtering` | `scanText`, `ScanError`, and readonly tables for exclusions, supported files, binary signatures, and inspection limits. |
-| `@playgroundvibes/cli/skills`    | `getSkillPath`, `installSkill`, `InstallSkillOptions`, and `InstallSkillResult`.                                        |
+| Import                           | Exports                                                                                                             |
+| -------------------------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `@playgroundvibes/cli`           | `createPlaygroundClient`, `ConsentError`, `ScanError`, skill helpers, and public client/project/result types.       |
+| `@playgroundvibes/cli/filtering` | `scanText`, `ScanError`, and readonly `CREDENTIAL_PATTERNS`, `BUILT_IN_EXCLUSIONS`, and `INSPECTION_LIMITS` tables. |
+| `@playgroundvibes/cli/skills`    | `getSkillPath`, `installSkill`, `InstallSkillOptions`, and `InstallSkillResult`.                                    |
 
 `PlaygroundClient`, `Review`, `ProjectMetadata`, `Manifest`, `ConnectionInfo`, `DeploymentConsent`, and `DeploymentResult` are named interfaces. Reviews and their nested fields are readonly in TypeScript and frozen at runtime. Account and deployment results expose validated fields rather than arbitrary server response dictionaries.
 
@@ -170,14 +175,14 @@ if (userApproved) {
 To inspect the configured rules or check a single piece of text locally:
 
 ```ts
-import { BUILT_IN_EXCLUSIONS, BINARY_SIGNATURES, scanText } from '@playgroundvibes/cli/filtering';
+import { BUILT_IN_EXCLUSIONS, CREDENTIAL_PATTERNS, scanText } from '@playgroundvibes/cli/filtering';
 
 console.table(BUILT_IN_EXCLUSIONS.map(({ id, reason }) => ({ id, reason })));
-console.table(BINARY_SIGNATURES.map(({ format, parts }) => ({ format, parts })));
+console.table(CREDENTIAL_PATTERNS);
 await scanText('export const greeting = "hello";', 'src/main.ts');
 ```
 
-`scanText` resolves when the configured text checks pass and throws `ScanError` with safe path/line/rule findings when they fail. It is not a project approval: full preparation also checks paths, file types, ignore rules, metadata, and artifact limits. Exported policy tables are descriptive and immutable; they cannot disable deployment checks.
+`scanText` resolves when the literal checks pass and throws `ScanError` with path/line/rule findings when they fail. It does not decode its input or grant project approval: full preparation also applies path, ignore, metadata, and artifact limits. Exported policy tables are descriptive and immutable; they cannot disable deployment checks.
 
 ## Agent skill
 

@@ -3,11 +3,17 @@ import {
   ConsentError,
   ScanError,
   type ConnectionInfo,
+  type ArtifactKind,
   type DeploymentResult,
   type Manifest,
   type Review,
 } from '@playgroundvibes/cli';
-import { scanText, BINARY_SIGNATURES } from '@playgroundvibes/cli/filtering';
+import {
+  scanText,
+  CREDENTIAL_PATTERNS,
+  INSPECTION_LIMITS,
+  type CredentialPattern,
+} from '@playgroundvibes/cli/filtering';
 import {
   installSkill,
   type InstallSkillOptions,
@@ -22,6 +28,10 @@ const manifest: Manifest = {
   license: 'MIT',
   remix: true,
 };
+const sourceOnlyManifest: Manifest = { ...manifest, source_only: true };
+void sourceOnlyManifest;
+const coverKind: ArtifactKind = 'cover';
+void coverKind;
 const installation: InstallSkillOptions = { cwd: '/project' };
 const claudeInstallation: InstallSkillOptions = {
   cwd: '/project',
@@ -44,7 +54,12 @@ void manifest;
 void installation;
 void installSkill;
 void scanText('export const greeting = "hello";', 'main.ts');
-void BINARY_SIGNATURES;
+const patterns: readonly CredentialPattern[] = CREDENTIAL_PATTERNS;
+const sourceLimit: number = INSPECTION_LIMITS.sourceFileBytes;
+void patterns;
+void sourceLimit;
+// @ts-expect-error The published credential policy cannot be edited.
+CREDENTIAL_PATTERNS[0]!.pattern = 'different';
 
 async function consumingApplication(review: Review): Promise<DeploymentResult> {
   const client = createPlaygroundClient({ cwd: '/project' });

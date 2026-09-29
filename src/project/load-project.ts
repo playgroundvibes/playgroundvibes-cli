@@ -2,7 +2,9 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import type { JsonObject } from '../api/transport.js';
+import { resolveCoverPath } from '../artifacts/inspect-cover.js';
 import { readRegularFile, resolveProjectPath } from '../filtering/collect-files.js';
+import { resolveBrowserBuild } from './browser-build.js';
 import { readProjectIdentity, type ProjectIdentity } from './identity.js';
 
 const MAX_MANIFEST_BYTES = 256 * 1024;
@@ -12,6 +14,7 @@ export interface LoadedProject {
   readonly manifest: JsonObject;
   readonly identity?: ProjectIdentity;
   readonly buildRoot?: string;
+  readonly coverPath?: string;
 }
 
 async function validateProjectRoot(cwd: string, configDir: string): Promise<string> {
@@ -53,20 +56,11 @@ export async function loadProject(cwd: string, configDir: string): Promise<Loade
   }
   const sourceRoot = path.resolve(path.dirname(manifestPath), manifest.source_dir ?? '..');
   if (sourceRoot !== root) throw new Error('source_dir must select the current project root.');
-  if (manifest.cover_file !== undefined) {
-    throw new Error(
-      'Binary cover images cannot be fully inspected by this release. Remove cover_file and exclude the image with .playgroundignore before continuing.',
-    );
-  }
+  const coverPath =
+    manifest.cover_file !== undefined
+      ? await resolveCoverPath(root, manifestPath, manifest.cover_file)
+      : undefined;
 
-  let buildRoot: string | undefined;
-  if (manifest.build_dir !== undefined) {
-    if (typeof manifest.build_dir !== 'string' || !manifest.build_dir)
-      throw new Error('build_dir must be a path.');
-    buildRoot = await resolveProjectPath(
-      root,
-      path.resolve(path.dirname(manifestPath), manifest.build_dir),
-    );
-  }
-  return { root, manifest, identity: await readProjectIdentity(root), buildRoot };
+  const buildRoot = await resolveBrowserBuild(root, manifest, manifestPath);
+  return { root, manifest, identity: await readProjectIdentity(root), buildRoot, coverPath };
 }

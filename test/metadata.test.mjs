@@ -25,6 +25,7 @@ test('metadata preserves supplied provenance, defaults ownership settings, and e
     live_url: 'https://example.com/app',
     source_dir: '..',
     build_dir: '../dist',
+    source_only: true,
     cover_file: '../cover.png',
     source: 'ignored payload',
     unknown: 'ignored field',
@@ -37,7 +38,7 @@ test('metadata preserves supplied provenance, defaults ownership settings, and e
     result.source_id,
     'cli-' + createHash('sha256').update('/selected/project').digest('hex'),
   );
-  for (const field of ['source_dir', 'build_dir', 'cover_file', 'source', 'unknown'])
+  for (const field of ['source_dir', 'build_dir', 'source_only', 'cover_file', 'source', 'unknown'])
     assert.equal(Object.hasOwn(result, field), false);
   assert.equal(build().creation_details, undefined);
   assert.deepEqual(build({ creation_details: { tools: [], model: '' } }).creation_details, {

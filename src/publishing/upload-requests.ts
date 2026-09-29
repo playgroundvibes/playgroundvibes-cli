@@ -13,12 +13,15 @@ export function buildUploadRequests(upload: PreparedUpload, operationId: string)
   const combined = { ...base, projects: [entry], more_artifacts: false };
   if (Buffer.byteLength(JSON.stringify(combined)) <= MAX_REQUEST_BYTES) return [combined];
 
-  const { source, build, ...metadata } = entry;
-  const parts: JsonObject[] = [
-    { ...base, projects: [{ ...metadata, source }], more_artifacts: build !== undefined },
-  ];
-  if (build !== undefined)
-    parts.push({ ...base, projects: [{ ...metadata, build }], more_artifacts: false });
+  const { source, build, cover, ...metadata } = entry;
+  const artifacts: JsonObject[] = [{ source }];
+  if (build !== undefined) artifacts.push({ build });
+  if (cover !== undefined) artifacts.push({ cover });
+  const parts: JsonObject[] = artifacts.map((artifact, index) => ({
+    ...base,
+    projects: [{ ...metadata, ...artifact }],
+    more_artifacts: index < artifacts.length - 1,
+  }));
   if (parts.some((part) => Buffer.byteLength(JSON.stringify(part)) > MAX_REQUEST_BYTES)) {
     throw new Error('One upload part exceeds 16 MiB. Reduce the project size.');
   }

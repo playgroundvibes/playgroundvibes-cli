@@ -1,5 +1,4 @@
 import type { ExcludedFile, Review } from '../publishing/types.js';
-import { ScanError } from '../filtering/index.js';
 
 const help = `Usage: playgroundvibes [--config-dir DIR] <command> [options]
 
@@ -22,14 +21,23 @@ Options:
 
 Deploy reads .playground/manifest.json in the current project. --dry-run scans
 and reviews files offline without credentials, configuration writes, or uploads.
-Unsupported binary/archive files and cover_file are blocked; exclude unneeded
-assets explicitly in .playgroundignore before reviewing again.
+Build the browser app first. Set build_dir relative to .playground/, or let the
+CLI select one of dist/, build/, or out/ containing index.html. Missing or
+ambiguous builds require correction. Set source_only: true in the manifest only
+when intentionally publishing without a browser preview. The CLI does not run builds.
+All file types and extensions are accepted for regular files under the original
+bundle's path exclusions and size limits. Checks match only its literal credential patterns
+in each file's UTF-8 representation; encoded and compressed content is not inspected.
+PNG/JPEG/WebP cover_file images up to 3 MiB are supported. Explicit covers do not
+apply source/build exclusions or ignore rules. Review these selections carefully.
+Source limits are 50 MiB per file/total and 2,000 files; builds allow 3 MiB per file,
+10 MiB total, and 150 files. ZIPs are limited to 10 MiB and requests to 16 MiB.
 Review the complete included files, exclusions, destination, and account before
 publishing. Interactive deploy requires typing PUBLISH. Noninteractive deploy
 and --json require --consent with the exact account-bound review digest.
 There is no --yes option. A changed project or account requires a fresh review.
 
-Deployment sends source and optional browser build files to Playground Vibes.
+Deployment sends source, optional browser build files, and a selected cover to Playground Vibes.
 A completed import publishes the listing and available browser preview;
 source download and remix permission are separate choices.
 Playground keeps private Git history and may improve supported browser projects.
@@ -98,7 +106,7 @@ export function printReview(review: Review, dryRun: boolean, asJson: boolean): v
     `Excluded paths (${review.excluded.length}):`,
     ...(review.excluded.length ? review.excluded.map(formatExclusion) : ['  None']),
     '',
-    'Source and any browser build files above will be sent to Playground Vibes.',
+    'Source, browser build files, and any selected cover above will be sent to Playground Vibes.',
     'A completed import publishes the listing and available browser preview.',
     'Source download and remix permission are separate choices.',
     `Publication: ${review.publication}`,
@@ -110,16 +118,7 @@ export function printReview(review: Review, dryRun: boolean, asJson: boolean): v
 }
 
 export function printError(error: unknown, asJson: boolean): void {
-  let message = error instanceof Error ? error.message : String(error);
-  if (
-    error instanceof ScanError &&
-    error.findings.some((finding) =>
-      ['inspection/unsupported-file-type', 'inspection/binary-or-archive'].includes(finding.rule),
-    )
-  ) {
-    message +=
-      ' This release cannot inspect that file type. Exclude unneeded assets in .playgroundignore, then review again.';
-  }
+  const message = error instanceof Error ? error.message : String(error);
   if (asJson) printJson({ type: 'error', error: message });
   else process.stderr.write(`Error: ${message}\n`);
 }

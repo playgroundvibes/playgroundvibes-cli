@@ -2,8 +2,9 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { constants } from 'node:fs';
 import { createHash } from 'node:crypto';
-import { decodePlainText, INSPECTION_LIMITS, supportedTextFile } from './file-types.js';
+import { INSPECTION_LIMITS } from './limits.js';
 import { rejectInspection } from './findings.js';
+import { inspectFileContents } from './inspect-file.js';
 import {
   builtInExclusion,
   matchIgnoreFiles,
@@ -13,7 +14,6 @@ import {
   type ExclusionMatch,
   type IgnoreScope,
 } from './path-exclusions.js';
-import { scanText } from './scan-text.js';
 
 export interface FileSummary {
   /** Relative to the source or browser-build artifact. */
@@ -102,7 +102,7 @@ export async function collectFiles(
       rejectInspection(displayPath, 'inspection/file-size-limit');
     const contents = await readRegularFile(file);
     if (contents.length > fileLimit) rejectInspection(displayPath, 'inspection/file-size-limit');
-    await scanText(decodePlainText(contents, displayPath), displayPath);
+    await inspectFileContents(contents, displayPath);
     inspected.set(file, contents);
     return contents;
   }
@@ -113,8 +113,9 @@ export async function collectFiles(
   ): Promise<IgnoreScope | undefined> {
     const displayPath = relativePath(projectRoot, file);
     try {
-      const contents = decodePlainText(await inspectFile(file), displayPath);
-      return parseIgnoreFile(contents, {
+      await resolveProjectPath(projectRoot, file);
+      const contents = await readRegularFile(file);
+      return parseIgnoreFile(contents.toString('utf8'), {
         source,
         directory: path.dirname(file),
         file: displayPath,
@@ -139,17 +140,24 @@ export async function collectFiles(
     }
 
     const children = await fs.readdir(directory, { withFileTypes: true });
-    children.sort((left, right) => (left.name < right.name ? -1 : left.name > right.name ? 1 : 0));
+    children.sort((left, right) => left.name.localeCompare(right.name, 'en'));
     for (const entry of children) {
       const fullPath = path.join(directory, entry.name);
       const artifactPath = relativePath(root, fullPath);
       const projectPath = relativePath(projectRoot, fullPath);
-      // Check before any filename enters a report, including exclusion reports.
-      await scanText(projectPath, '[filename]');
-      if (!safePath(artifactPath)) rejectInspection('[filename]', 'inspection/unsafe-path');
+      if (!safePath(artifactPath)) {
+        skipped.push({
+          path: projectPath,
+          source: 'built-in',
+          rule: 'unsafe-path',
+          reason: 'unsafe path',
+        });
+        continue;
+      }
 
       const structural = structuralExclusion(artifactPath, entry.isSymbolicLink(), build);
-      let excluded = entry.isSymbolicLink() ? structural : builtInExclusion(projectPath);
+      let excluded = builtInExclusion(artifactPath);
+      if (entry.isSymbolicLink()) excluded ??= structural;
       excluded ??=
         projectIgnore && matchIgnoreFiles(fullPath, entry.isDirectory(), [projectIgnore]);
       excluded ??= matchIgnoreFiles(fullPath, entry.isDirectory(), gitRules);
@@ -163,11 +171,15 @@ export async function collectFiles(
         await walk(fullPath, gitRules);
         continue;
       }
-      if (!entry.isFile()) rejectInspection(projectPath, 'inspection/nonregular-file');
-      if (!supportedTextFile(entry.name, path.extname(entry.name), build)) {
-        rejectInspection(projectPath, 'inspection/unsupported-file-type');
+      if (!entry.isFile()) {
+        skipped.push({
+          path: projectPath,
+          source: 'built-in',
+          rule: 'nonregular-file',
+          reason: 'not a regular file',
+        });
+        continue;
       }
-
       const contents = await inspectFile(fullPath);
       bytes += contents.length;
       if (bytes > totalLimit || files.length >= countLimit) {

@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import { unzipSync, strFromU8 } from 'fflate';
-import { createPlaygroundClient, ConsentError } from '../dist/index.js';
+import { createPlaygroundClient, ConsentError, ScanError } from '../dist/index.js';
 
 async function fixture(t, manifest = {}) {
   const base = await fs.realpath(
@@ -71,6 +71,108 @@ test('offline inspection covers final metadata, source and build without state o
   assert.equal(Object.isFrozen(review.metadata), true);
   assert.equal(Object.isFrozen(review.files[0]), true);
   await assert.rejects(f.client.deploy(review, { consent: review.digest }), ConsentError);
+});
+
+test('an omitted build_dir includes detected browser files in the review and actual import ZIP', async (t) => {
+  const f = await fixture(t, { build_dir: undefined });
+  const script = 'document.querySelector("h1").textContent = "Browser build loaded";';
+  await fs.writeFile(path.join(f.root, 'dist/app.js'), script);
+  const sourceMap = '{"version":3,"sources":["../src/main.ts"],"mappings":""}';
+  const model = Buffer.from([0, 0xff, 0x80, 1, 2]);
+  const html = '<h1>Hello</h1><script src="./app.js"></script>';
+  await fs.writeFile(path.join(f.root, 'dist/app.js.map'), sourceMap);
+  await fs.writeFile(path.join(f.root, 'dist/model.custom-binary'), model);
+  await fs.writeFile(path.join(f.root, 'dist/index.html'), html);
+  await fs.writeFile(path.join(f.root, '.gitignore'), 'dist/\n');
+  await f.client.connect('ABCD2345');
+  const review = await f.client.prepare();
+  assert.deepEqual(
+    review.files.filter((file) => file.artifact === 'build').map((file) => file.path),
+    ['app.js', 'app.js.map', 'index.html', 'model.custom-binary'],
+  );
+  assert.equal(
+    review.warnings.some((warning) => warning.startsWith('Source only:')),
+    false,
+  );
+  await f.client.deploy(review, { consent: review.digest });
+  assert.equal(imports(f).length, 1);
+  const entry = imports(f)[0].body.projects[0];
+  assert.equal(typeof entry.build, 'string');
+  assert.match(entry.build, /^[A-Za-z0-9+/]+={0,2}$/);
+  const archive = unzipSync(Buffer.from(entry.build, 'base64'));
+  assert.deepEqual(Object.keys(archive), [
+    'app.js',
+    'app.js.map',
+    'index.html',
+    'model.custom-binary',
+  ]);
+  assert.equal(strFromU8(archive['app.js']), script);
+  assert.equal(strFromU8(archive['app.js.map']), sourceMap);
+  assert.equal(strFromU8(archive['index.html']), html);
+  assert.deepEqual(Buffer.from(archive['model.custom-binary']), model);
+  assert.ok(
+    !review.files.some((file) => file.artifact === 'source' && file.path.startsWith('dist/')),
+  );
+  assert.equal(Object.hasOwn(entry, 'source_only'), false);
+});
+
+test('missing browser output blocks offline inspection and preparation before import or project writes', async (t) => {
+  const f = await fixture(t, { build_dir: undefined });
+  await fs.rm(path.join(f.root, 'dist'), { recursive: true });
+  await fs.writeFile(path.join(f.root, 'index.html'), '<h1>Root is not an automatic build</h1>');
+  await assert.rejects(f.client.inspect(), /No browser build.*build_dir.*source_only/);
+  assert.equal(f.calls.length, 0);
+  await assert.rejects(fs.access(f.configDir), { code: 'ENOENT' });
+  await assert.rejects(fs.access(path.join(f.root, '.playground/project.json')), {
+    code: 'ENOENT',
+  });
+
+  await f.client.connect('ABCD2345');
+  const connectionPath = path.join(f.configDir, 'connection.json');
+  const connection = await fs.readFile(connectionPath);
+  await assert.rejects(f.client.prepare(), /No browser build/);
+  assert.deepEqual(await fs.readFile(connectionPath), connection);
+  assert.equal(imports(f).length, 0);
+  await assert.rejects(fs.access(path.join(f.root, '.playground/project.json')), {
+    code: 'ENOENT',
+  });
+});
+
+test('explicit source-only publication omits browser artifacts and the local source_only field', async (t) => {
+  const f = await fixture(t, { build_dir: undefined, source_only: true });
+  await f.client.connect('ABCD2345');
+  const review = await f.client.prepare();
+  assert.ok(review.files.every((file) => file.artifact === 'source'));
+  assert.ok(review.warnings.some((warning) => warning.startsWith('Source only:')));
+  assert.equal(Object.hasOwn(review.metadata, 'source_only'), false);
+  await f.client.deploy(review, { consent: review.digest });
+  const entry = imports(f)[0].body.projects[0];
+  assert.equal(Object.hasOwn(entry, 'build'), false);
+  assert.equal(Object.hasOwn(entry, 'source_only'), false);
+  assert.equal(typeof entry.source, 'string');
+});
+
+test('literal credentials in detected builds block without a source-only fallback', async (t) => {
+  const secret = 'sk-proj-' + 'a'.repeat(44);
+  for (const [filename, contents] of [
+    ['app.js', `const credential = "${secret}";`],
+    ['data.sqlite', Buffer.from('SQLite format 3\0' + secret)],
+  ]) {
+    const f = await fixture(t, { build_dir: undefined });
+    await fs.writeFile(path.join(f.root, 'dist', filename), contents);
+    await assert.rejects(
+      f.client.inspect(),
+      (error) => error instanceof ScanError && !error.message.includes(secret),
+    );
+    assert.equal(f.calls.length, 0);
+    await assert.rejects(fs.access(f.configDir), { code: 'ENOENT' });
+    await f.client.connect('ABCD2345');
+    await assert.rejects(f.client.prepare());
+    assert.equal(imports(f).length, 0);
+    await assert.rejects(fs.access(path.join(f.root, '.playground/project.json')), {
+      code: 'ENOENT',
+    });
+  }
 });
 
 test('missing, incorrect and forged consent never post artifacts or write project identity', async (t) => {
@@ -169,9 +271,10 @@ test('final metadata and browser build findings block publication without exposi
   assert.equal(imports(f).length + imports(g).length, 0);
 });
 
-test('uninspectable covers and in-project credential directories fail closed', async (t) => {
-  const f = await fixture(t, { cover_file: '../screenshot.png' });
-  await assert.rejects(f.client.inspect(), /Binary cover images/);
+test('unsupported cover formats and in-project credential directories fail closed', async (t) => {
+  const f = await fixture(t, { cover_file: '../screenshot.gif' });
+  await fs.writeFile(path.join(f.root, 'screenshot.gif'), Buffer.from('GIF89a'));
+  await assert.rejects(f.client.inspect(), /cover_file must select a PNG, JPEG, or WebP/);
   const g = await fixture(t);
   await assert.rejects(
     createPlaygroundClient({ cwd: g.root, configDir: path.join(g.root, 'private') }).inspect(),

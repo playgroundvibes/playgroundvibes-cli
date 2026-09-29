@@ -29,13 +29,13 @@ export const BUILT_IN_EXCLUSIONS: readonly PathExclusionRule[] = Object.freeze([
     id: 'environment-files',
     reason: 'environment file',
     match: 'component-pattern',
-    patterns: ['^\\.env(?:\\..*)?$', '^\\.envrc$'],
+    patterns: ['^\\.env(?:\\.[^/]*)?$'],
   }),
   rule({
     id: 'version-control',
     reason: 'version-control metadata',
     match: 'component-name',
-    patterns: ['.git', '.git-credentials', '.hg', '.svn'],
+    patterns: ['.git', '.hg', '.svn'],
   }),
   rule({
     id: 'dependencies',
@@ -61,46 +61,22 @@ export const BUILT_IN_EXCLUSIONS: readonly PathExclusionRule[] = Object.freeze([
     id: 'private-settings',
     reason: 'private account or tool settings',
     match: 'component-name',
-    patterns: [
-      '.aws',
-      '.azure',
-      '.config',
-      '.ssh',
-      '.gnupg',
-      '.openai',
-      '.npmrc',
-      '.pypirc',
-      '.netrc',
-      '.docker',
-      '.kube',
-    ],
+    patterns: ['.aws', '.ssh', '.gnupg', '.openai', '.npmrc', '.pypirc', '.netrc'],
   }),
   rule({
     id: 'assistant-settings',
     reason: 'local assistant settings',
     match: 'component-name',
-    patterns: ['.codex', '.claude', '.agents', '.cursor'],
-  }),
-  rule({
-    id: 'assistant-history',
-    reason: 'local assistant history or settings',
-    match: 'component-pattern',
-    patterns: ['^\\.aider.*$'],
-  }),
-  rule({
-    id: 'editor-settings',
-    reason: 'local editor history or settings',
-    match: 'component-name',
-    patterns: ['.history', '.idea', '.vscode', '.DS_Store'],
+    patterns: ['.codex', '.claude'],
   }),
   rule({
     id: 'credential-filenames',
     reason: 'credential or service account file',
     match: 'component-pattern',
     patterns: [
-      '^credentials.*$',
-      '^secrets?.*$',
-      '^service[-_]?account.*$',
+      '^credentials[^/]*$',
+      '^secrets?[^/]*$',
+      '^service[-_]?account[^/]*$',
       '^id_rsa$',
       '^id_ed25519$',
     ],
@@ -117,12 +93,6 @@ export const BUILT_IN_EXCLUSIONS: readonly PathExclusionRule[] = Object.freeze([
     match: 'path-pattern',
     patterns: ['(?:^|/)(?:conversations?|chats?|messages?|users?)\\.(?:json|jsonl|html|csv|txt)$'],
   }),
-  rule({
-    id: 'source-maps',
-    reason: 'source maps are not uploaded',
-    match: 'path-pattern',
-    patterns: ['\\.map$'],
-  }),
 ]);
 
 // Compile internal matchers separately from the public, immutable policy descriptions.
@@ -135,8 +105,8 @@ const compiledRules = BUILT_IN_EXCLUSIONS.map((definition) => ({
       : definition.patterns.map((value) => new RegExp(value, 'i')),
 }));
 
-export function builtInExclusion(projectPath: string): ExclusionMatch | undefined {
-  const components = projectPath.split('/');
+export function builtInExclusion(artifactPath: string): ExclusionMatch | undefined {
+  const components = artifactPath.split('/');
   for (const { definition, names, expressions } of compiledRules) {
     let matched: boolean;
     switch (definition.match) {
@@ -149,7 +119,7 @@ export function builtInExclusion(projectPath: string): ExclusionMatch | undefine
         );
         break;
       case 'path-pattern':
-        matched = expressions.some((pattern) => pattern.test(projectPath));
+        matched = expressions.some((pattern) => pattern.test(artifactPath));
         break;
     }
     if (matched) return { source: 'built-in', rule: definition.id, reason: definition.reason };
@@ -163,7 +133,7 @@ export function structuralExclusion(
   build: boolean,
 ): ExclusionMatch | undefined {
   if (isSymlink) return { source: 'built-in', rule: 'symbolic-links', reason: 'symbolic link' };
-  const topLevel = artifactPath.split('/')[0]?.toLowerCase();
+  const topLevel = artifactPath.split('/')[0];
   if (!build && topLevel && ['dist', 'build', 'out'].includes(topLevel)) {
     return {
       source: 'built-in',
@@ -206,7 +176,7 @@ export function matchIgnoreFiles(
   let match: ExclusionMatch | undefined;
   for (const scope of scopes) {
     const relativePath = path.relative(scope.directory, fullPath).split(path.sep).join('/');
-    const result = scope.matcher.checkIgnore(relativePath + (isDirectory ? '/' : ''));
+    const result = scope.matcher.test(relativePath + (isDirectory ? '/' : ''));
     if (result.ignored) {
       match = {
         source: scope.source,

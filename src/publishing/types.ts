@@ -1,7 +1,7 @@
 import type { ProjectMetadata } from '../project/types.js';
 import type { ExclusionMatch } from '../filtering/path-exclusions.js';
 
-export type ArtifactKind = 'source' | 'build';
+export type ArtifactKind = 'source' | 'build' | 'cover';
 
 export interface ReviewFile {
   readonly artifact: ArtifactKind;

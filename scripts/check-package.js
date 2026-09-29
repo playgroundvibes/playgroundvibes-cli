@@ -41,14 +41,9 @@ assert.deepEqual(
 const expectedExports = {
   '.': ['ConsentError', 'ScanError', 'createPlaygroundClient', 'getSkillPath', 'installSkill'],
   './filtering': [
-    'BINARY_SIGNATURES',
-    'BUILD_TEXT_EXTENSIONS',
     'BUILT_IN_EXCLUSIONS',
-    'DECODING_LIMITS',
-    'ENCODED_CONTAINER_SIGNATURES',
+    'CREDENTIAL_PATTERNS',
     'INSPECTION_LIMITS',
-    'SOURCE_TEXT_EXTENSIONS',
-    'SOURCE_TEXT_FILENAMES',
     'ScanError',
     'scanText',
   ],

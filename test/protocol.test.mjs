@@ -24,6 +24,7 @@ test('wire requests retain the owner CLI protocol and never send local review or
       title: 'Wire contract',
       summary: 'An offline protocol fixture.',
       date: '2020-01-01',
+      source_only: true,
     }),
   );
   const calls = [];
@@ -102,6 +103,7 @@ test('wire requests retain the owner CLI protocol and never send local review or
     'accountId',
     'excluded',
     'warnings',
+    'source_only',
   ]) {
     assert.equal(Object.hasOwn(upload, localField), false);
     assert.equal(Object.hasOwn(entry, localField), false);

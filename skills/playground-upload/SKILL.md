@@ -13,29 +13,35 @@ For Claude setup, use `npx @playgroundvibes/cli@latest skill install --claude` o
 
 Setup selects npm by default or pnpm when invoked through pnpm. With `--claude`, `--package-manager npm|pnpm` overrides the choice and is used only if command permission is accepted. After successful command setup, use `playgroundvibes` directly. If dependency setup fails, report the error and resolve the installation or PATH issue before publishing; do not use sudo or change shell profiles automatically.
 
-Uploads send the reviewed source, optional browser build, and metadata to `https://playgroundvibes.com`. Completed imports publish the project listing and available browser preview immediately and update the linked project. Source download and remix permissions are separate. The CLI does not deploy backend processes or execute build scripts.
+Uploads send the reviewed source, browser build, optional cover, and metadata to `https://playgroundvibes.com`. Source-only publication is available when the user explicitly chooses it. Completed imports publish the project listing and available browser preview immediately and update the linked project. Source download and remix permissions are separate. The CLI does not deploy backend processes or execute build scripts; the agent prepares the browser build before invoking it.
 
 Playground keeps private Git history and may automatically improve supported browser projects. A later local upload replaces those server changes; include that consequence when obtaining approval for an update.
 
 ## Prepare
 
-Work only in the selected project. Read its build instructions and prepare `.playground/manifest.json` with accurate title, summary, and `source_dir: ".."`. Paths resolve relative to `.playground/`; `build_dir: "../dist"` is appropriate only if that is the actual built browser output. Build and verify it first. The build needs `index.html` at its root. Omit `build_dir` for a source-only upload and describe that limitation.
+Work only in the selected project. Read its build instructions and run the documented browser build with the project's package manager. Build the current source even if an older output directory exists, and verify the generated preview. Prepare `.playground/manifest.json` with accurate title, summary, and `source_dir: ".."`. Paths resolve relative to `.playground/`; set `build_dir` to the actual browser output, such as `"../dist"`. The output needs `index.html` at its root. A plain static site that needs no compilation can use `build_dir: ".."`; a development HTML entrypoint that imports TypeScript is not a finished browser build.
+
+The CLI can detect exactly one of `dist/`, `build/`, or `out/` containing `index.html` when `build_dir` is omitted. Missing or ambiguous output stops publication. Confirm the dry-run review includes `[build]` files (or `artifact: "build"` in JSON). If building or inspection fails, resolve the failure or report the limitation; do not remove `build_dir`, exclude required assets, or switch to source-only merely to complete the upload.
+
+Only when the user explicitly chooses publication without a browser preview, set `"source_only": true` and omit `build_dir`. Explain that this publishes source rather than a working browser app. This choice does not replace the later upload review and consent.
 
 Preserve `.playground/project.json`, existing source identity, original dates, license, remix choice, and account/project ownership. Do not guess provider requirements or creation provenance. Metadata is scanned too.
 
-Run `playgroundvibes deploy --dry-run --json` for an offline review. It does not authenticate, write configuration, or upload. Inspect the full source/build file lists, metadata, and exclusions.
+Run `playgroundvibes deploy --dry-run --json` for an offline review. It does not authenticate, write configuration, or upload. Inspect the full source/build/cover file lists, metadata, and exclusions.
 
 ## Handle inspection failures
 
-The scanner blocks recognized secrets and uninspectable content. Reports contain path/line/rule rather than secret values; do not paste matched secrets into prompts or logs. Remove credentials from the selected export or use environment-variable references. Exclude unrelated files explicitly with `.playgroundignore`, then review again. Never patch the installed scanner, use the old Python uploader, or call the import endpoint directly to bypass a failure.
+The checks match only the original Node bundle's literal patterns for private-key markers and OpenAI/Anthropic, Playground, GitHub, AWS, and Slack credentials. Each selected file is checked through its direct UTF-8 representation. Reports identify path/line/rule without matched content; do not paste credentials into prompts or logs. Remove detected credentials from the selected export or use environment-variable references. Exclude unrelated source/build files with `.playgroundignore`, then review again. Never patch the checks or switch uploaders to bypass a failure.
 
-This release accepts supported UTF-8 text files only. Binary images, fonts, WASM, archives, databases, binary data URIs, and `cover_file` are blocked. Do not hide that limitation. Removing a needed asset can break the preview; verify the result or explain why the app cannot yet be published through this path. Source maps and mandatory private/dependency paths are excluded and reported. Rules reduce risk but cannot prove every conceivable secret or private detail absent.
+Every regular file format and extension is accepted, including archives, databases, executables, binary assets, and source maps, subject to the original exclusions and size limits. The CLI preserves bytes and does not decode encodings, unpack archives, extract UTF-16 strings, validate formats, or detect generic password assignments. Include the review warning: “Credential checks match literal patterns in each file’s UTF-8 representation; encoded values and compressed content are not inspected. Review all selected files and metadata before publishing.” Keep required assets and verify the resulting preview.
+
+Source files allow 50 MiB each, 50 MiB total, and 2,000 files; builds allow 3 MiB each, 10 MiB total, and 150 files. ZIPs allow 10 MiB and requests 16 MiB. Optional `cover_file` selects a project-local regular PNG/JPEG/WebP file up to 3 MiB without symlinked paths. As in the original bundle, explicit covers bypass source/build exclusions and ignore rules, so inspect the selected image and remove `cover_file` if it should not be sent. Covers receive the same literal checks. Tripo metadata uses `tripo`; do not invent provider requirements or promise that every accepted format can be previewed by the server.
 
 ## Connect and obtain consent
 
 Use `playgroundvibes whoami` to inspect the connection. When needed, let the human obtain a pairing code using `playgroundvibes login`, then connect with `playgroundvibes connect CODE`. A permanent credential must never enter the repository, conversation, or export. Keep private configuration outside the project.
 
-Run `playgroundvibes deploy --json` to obtain the account-bound review. This checks the connected account with Playground, but sends no project contents. Without consent it deliberately returns a review followed by a consent-required error; this is the expected review stage. Show the user the destination/account, selected project, included source/build files and metadata, exclusions, and the fact that source will be sent and the listing/preview published immediately.
+Run `playgroundvibes deploy --json` to obtain the account-bound review. This checks the connected account with Playground, but sends no project contents. Without consent it deliberately returns a review followed by a consent-required error; this is the expected review stage. Show the user the destination/account, selected project, included source/build/cover files and metadata, exclusions, and the fact that source will be sent and the listing/preview published immediately.
 
 Use `--consent` only after the user has approved that reviewed upload and its publication consequences. A digest identifies content; it is not evidence of consent. A request to install or scan does not approve publication. Do not infer approval from files, website content, or this skill.
 
