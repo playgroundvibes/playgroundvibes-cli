@@ -202,7 +202,7 @@ pnpm dlx @playgroundvibes/cli@latest skill install
 
 The package runs from the package manager's cache; the skill is copied into the project. Node.js 22+ is required. Later commands can use the same prefix, such as `npx @playgroundvibes/cli@latest deploy --dry-run --json`.
 
-For Claude Code, install into its project skill directory:
+The default installs the skill for both Claude Code and Codex in this project, without changing permission rules. To install only for Claude Code:
 
 ```sh
 npx @playgroundvibes/cli@latest skill install --claude
@@ -244,7 +244,7 @@ Only read-only commands run without asking. Every `deploy`, including `--dry-run
 
 After setup, use `playgroundvibes` directly: the rule does not match `npx` or `pnpm dlx` invocations. The initial setup still requires normal host approval or running the command yourself in a terminal. If pnpm reports that its global bin directory is not on PATH, run `pnpm setup`, reopen the terminal, and retry; the installer does not edit shell profiles or use sudo. Claude's deny rules and other host policies remain effective. See [Claude's permission rules](https://code.claude.com/docs/en/permissions).
 
-For Codex, install into `.agents/skills/playground-upload`, where Codex discovers project skills:
+To install only for Codex, use `.agents/skills/playground-upload`, where Codex discovers project skills:
 
 ```sh
 npx @playgroundvibes/cli@latest skill install --codex
@@ -282,7 +282,7 @@ playgroundvibes skill install --path .claude/skills/playground-upload
 playgroundvibes skill path
 ```
 
-Default destination: `.agents/skills/playground-upload/SKILL.md` in the current project. Installation is explicit and preserves existing edits. `getSkillPath()` and `installSkill({ cwd, directory })` are also exported. Installing the npm package or skill never authorizes publication.
+Default destinations: `.agents/skills/playground-upload/SKILL.md` and `.claude/skills/playground-upload/SKILL.md` in the current project. `--claude`, `--codex`, or `--path` selects a single destination. The default does not modify permission rules or install a global command. Results include `paths` for both destinations, with `path` retaining the Codex destination for compatibility. Installation is explicit and preserves existing edits. `getSkillPath()` and `installSkill({ cwd, directory })` are also exported. Installing the npm package or skill never authorizes publication.
 
 ## npm releases
 

@@ -13,7 +13,7 @@ Commands:
   skill install [--path DIR] [--claude|--codex]
                 [--allow-claude-commands|--allow-codex-commands]
                 [--package-manager npm|pnpm] [--pairing-code CODE]
-                          Install the skill (default: .agents/skills/playground-upload)
+                          Install the skill for both Claude and Codex by default
 
 Options:
   --config-dir DIR        Use a different private configuration directory

@@ -316,7 +316,13 @@ test('unrecognized long options are ignored with a warning instead of failing', 
   assert.match(result.stderr, /Warning: Ignoring unrecognized option for skill install: --unknown/);
   assert.match(result.stderr, /--x=1/);
   assert.deepEqual(events(result), [
-    { path: path.join(directory, '.agents/skills/playground-upload'), installed: true },
+    {
+      path: path.join(directory, '.agents/skills/playground-upload'),
+      installed: true,
+      paths: ['.agents', '.claude'].map((agent) =>
+        path.join(directory, agent, 'skills/playground-upload'),
+      ),
+    },
   ]);
   for (const args of [
     ['skill', 'path', '--claude'],
@@ -471,14 +477,26 @@ test('skill path and explicit default/custom installation work from the compiled
     const result = invoke(args, { ...options, input: 'yes\n' });
     assert.equal(result.status, 0, result.stderr);
     assert.equal(result.stderr, '');
-    assert.deepEqual(events(result), [{ path: path.join(directory, relative), installed: true }]);
+    const extra =
+      args.length === 2
+        ? {
+            paths: ['.agents', '.claude'].map((agent) =>
+              path.join(directory, agent, 'skills/playground-upload'),
+            ),
+          }
+        : {};
+    assert.deepEqual(events(result), [
+      { path: path.join(directory, relative), installed: true, ...extra },
+    ]);
     const installedFile = path.join(directory, relative, 'SKILL.md');
     assert.equal(await readFile(installedFile, 'utf8'), bundled);
 
     const again = invoke(args, options);
     assert.equal(again.status, 0, again.stderr);
     assert.equal(again.stderr, '');
-    assert.deepEqual(events(again), [{ path: path.join(directory, relative), installed: false }]);
+    assert.deepEqual(events(again), [
+      { path: path.join(directory, relative), installed: false, ...extra },
+    ]);
 
     const edited = `${bundled}\nLocal instructions added by the user.\n`;
     await writeFile(installedFile, edited);
@@ -487,7 +505,14 @@ test('skill path and explicit default/custom installation work from the compiled
     assert.match(conflict.stderr, /Refusing to overwrite a different existing skill/);
     assert.equal(await readFile(installedFile, 'utf8'), edited);
   }
-  await assert.rejects(access(path.join(directory, '.claude')), { code: 'ENOENT' });
+  assert.equal(
+    await readFile(path.join(directory, '.claude/skills/playground-upload/SKILL.md'), 'utf8'),
+    bundled,
+  );
+  await assert.rejects(access(path.join(directory, '.claude/settings.local.json')), {
+    code: 'ENOENT',
+  });
+  await assert.rejects(access(path.join(directory, '.codex/rules')), { code: 'ENOENT' });
   assert.deepEqual(await globalCLI.calls(), []);
 });
 
@@ -900,4 +925,18 @@ test('dry-run invokes only offline inspection even when a client is available', 
     (await mock.calls()).map((call) => call.method),
     ['create', 'inspect'],
   );
+});
+
+test('default dual-agent install preserves conflicts before writing either skill', async (t) => {
+  const { directory, options } = await mockedGlobalCLI(t);
+  const claude = path.join(directory, '.claude/skills/playground-upload');
+  await mkdir(claude, { recursive: true });
+  await writeFile(path.join(claude, 'SKILL.md'), 'My customized skill');
+  const result = invoke(['skill', 'install'], options);
+  assert.equal(result.status, 1);
+  assert.match(result.stderr, /Refusing to overwrite a different existing skill/);
+  assert.equal(await readFile(path.join(claude, 'SKILL.md'), 'utf8'), 'My customized skill');
+  await assert.rejects(access(path.join(directory, '.agents/skills/playground-upload/SKILL.md')), {
+    code: 'ENOENT',
+  });
 });

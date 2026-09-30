@@ -32,6 +32,8 @@ export interface InstallSkillOptions {
 export interface InstallSkillResult {
   path: string;
   installed: boolean;
+  /** Both destinations when installing the default Claude and Codex skills. */
+  paths?: string[];
   claudePermissions?: ClaudePermissionResult;
   codexPermissions?: CodexPermissionResult;
   globalCLI?: GlobalCLIResult;
@@ -80,7 +82,7 @@ async function copySkill(destination: string, contents: Buffer): Promise<boolean
   return true;
 }
 
-/** Install the skill; Claude/Codex permission setup also ensures its global CLI dependency. */
+/** Install for both agents by default; explicit targets select one. Permission setup is opt-in. */
 export async function installSkill({
   cwd = process.cwd(),
   directory,
@@ -120,14 +122,32 @@ export async function installSkill({
     ? '.claude/skills/playground-upload'
     : '.agents/skills/playground-upload';
   const destination = path.resolve(root, directory ?? defaultDirectory);
+  const destinations =
+    !directory && !claude && !codex
+      ? [destination, path.resolve(root, '.claude/skills/playground-upload')]
+      : [destination];
   // Validate settings before writing the skill; do not grant permissions if copying fails.
   const permissionPlan = allowClaudeCommands
     ? await prepareClaudeCommandPermission(root)
     : undefined;
   const codexPlan = allowCodexCommands ? await prepareCodexCommandPermission(root) : undefined;
   const contents = await readFile(path.join(getSkillPath(), 'SKILL.md'));
-  const installed = await copySkill(destination, contents);
+  // Check every target before copying so a conflicting skill is preserved without
+  // leaving a newly installed skill in the other agent's directory.
+  for (const target of destinations) {
+    await ensureDirectory(target);
+    try {
+      await existingMatches(path.join(target, 'SKILL.md'), contents);
+    } catch (error) {
+      if (errorCode(error) !== 'ENOENT') throw error;
+    }
+  }
+  let installed = false;
+  for (const target of destinations) {
+    installed = (await copySkill(target, contents)) || installed;
+  }
   const result: InstallSkillResult = { path: destination, installed };
+  if (destinations.length > 1) result.paths = destinations;
   if (permissionPlan) {
     result.globalCLI = await ensureGlobalCLI(packageManager);
     result.claudePermissions = await permissionPlan.apply();
