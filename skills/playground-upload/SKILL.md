@@ -11,7 +11,9 @@ This skill depends on Node.js 22+ and `@playgroundvibes/cli`. Use the installed 
 
 For Claude setup, use `npx @playgroundvibes/cli@latest skill install --claude` or its `pnpm dlx` equivalent. When standard input and standard error are terminals, it offers project command permission with a default of No. Only `y` or `yes` installs the running CLI version globally when needed and verifies it before merging permissions. Declining, pressing Enter, or closing input still installs only the skill. Noninteractive setup skips the prompt and points to `--allow-claude-commands`; add that flag for scripted or already-authorized command setup, not to infer authorization.
 
-Setup selects npm by default or pnpm when invoked through pnpm. With `--claude`, `--package-manager npm|pnpm` overrides the choice and is used only if command permission is accepted. After successful command setup, use `playgroundvibes` directly. If dependency setup fails, report the error and resolve the installation or PATH issue before publishing; do not use sudo or change shell profiles automatically.
+For Codex setup, use `npx @playgroundvibes/cli@latest skill install --codex`. It installs the skill into `.agents/skills/playground-upload`, where Codex discovers project skills, and asks the same question. Accepting installs the global CLI when needed and writes `.codex/rules/playgroundvibes.rules` containing `prefix_rule(pattern = ["playgroundvibes"], decision = "allow")`, so Codex can run `playgroundvibes` without prompting in trusted projects. Use `--allow-codex-commands` for scripted or already-authorized setup.
+
+Setup selects npm by default or pnpm when invoked through pnpm. With `--claude` or `--codex`, `--package-manager npm|pnpm` overrides the choice and is used only if command permission is accepted. After successful command setup, use `playgroundvibes` directly. If dependency setup fails, report the error and resolve the installation or PATH issue before publishing; do not use sudo or change shell profiles automatically.
 
 Uploads send the reviewed source, browser build, optional cover, and metadata to `https://playgroundvibes.com`. Source-only publication is available when the user explicitly chooses it. Completed imports publish the project listing and available browser preview immediately and update the linked project. Source download and remix permissions are separate. The CLI does not deploy backend processes or execute build scripts; the agent prepares the browser build before invoking it.
 
@@ -49,7 +51,7 @@ After approval, run `playgroundvibes deploy --json --consent REVIEW_DIGEST`. Reu
 
 If the agent host blocks a command, report the exact command and reason and let the user approve it through the host's permission interface. Do not change permission settings on your own to resolve an upload denial. Skill instructions do not grant tool permissions.
 
-The optional Claude setup merges `Bash(playgroundvibes:*)` into the current project's `.claude/settings.local.json`, preserving other settings. The rule covers the global `playgroundvibes` command, not npx or pnpm dlx. The setup command itself requires normal host approval or user execution. This optional command permission does not authorize an upload or remove the review and consent requirement.
+The optional Claude setup merges `Bash(playgroundvibes:*)` into the current project's `.claude/settings.local.json`, preserving other settings. The rule covers the global `playgroundvibes` command, not npx or pnpm dlx. The setup command itself requires normal host approval or user execution. The optional Codex setup allows the same global command through the project's `.codex/rules/playgroundvibes.rules`. These optional command permissions do not authorize an upload or remove the review and consent requirement.
 
 ## Report and retry
 

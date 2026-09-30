@@ -6,10 +6,12 @@ import {
   prepareClaudeCommandPermission,
   type ClaudePermissionResult,
 } from './claude-permissions.js';
+import { prepareCodexCommandPermission, type CodexPermissionResult } from './codex-permissions.js';
 import { ensureDirectory, errorCode } from './filesystem.js';
 import { ensureGlobalCLI, type GlobalCLIResult, type SkillPackageManager } from './global-cli.js';
 
 export type { ClaudePermissionResult } from './claude-permissions.js';
+export type { CodexPermissionResult } from './codex-permissions.js';
 export type { GlobalCLIResult, SkillPackageManager } from './global-cli.js';
 
 export interface InstallSkillOptions {
@@ -19,6 +21,10 @@ export interface InstallSkillOptions {
   claude?: boolean;
   /** Install the global CLI dependency and allow its commands in local Claude settings. Requires claude. */
   allowClaudeCommands?: boolean;
+  /** Install to Codex's project skill directory (.agents/skills) unless directory is provided. */
+  codex?: boolean;
+  /** Install the global CLI dependency and allow its commands in project Codex rules. Requires codex. */
+  allowCodexCommands?: boolean;
   /** Override npm/pnpm selection when installing the global command dependency. */
   packageManager?: SkillPackageManager;
 }
@@ -27,6 +33,7 @@ export interface InstallSkillResult {
   path: string;
   installed: boolean;
   claudePermissions?: ClaudePermissionResult;
+  codexPermissions?: CodexPermissionResult;
   globalCLI?: GlobalCLIResult;
 }
 
@@ -73,12 +80,14 @@ async function copySkill(destination: string, contents: Buffer): Promise<boolean
   return true;
 }
 
-/** Install the skill; Claude permission setup also ensures its global CLI dependency. */
+/** Install the skill; Claude/Codex permission setup also ensures its global CLI dependency. */
 export async function installSkill({
   cwd = process.cwd(),
   directory,
   claude = false,
   allowClaudeCommands = false,
+  codex = false,
+  allowCodexCommands = false,
   packageManager,
 }: InstallSkillOptions = {}): Promise<InstallSkillResult> {
   if (directory !== undefined && (typeof directory !== 'string' || !directory.trim())) {
@@ -87,14 +96,23 @@ export async function installSkill({
   if (typeof claude !== 'boolean' || typeof allowClaudeCommands !== 'boolean') {
     throw new TypeError('claude and allowClaudeCommands must be booleans');
   }
+  if (typeof codex !== 'boolean' || typeof allowCodexCommands !== 'boolean') {
+    throw new TypeError('codex and allowCodexCommands must be booleans');
+  }
+  if (claude && codex) {
+    throw new TypeError('claude and codex cannot be combined; install each separately');
+  }
   if (allowClaudeCommands && !claude) {
     throw new TypeError('allowClaudeCommands requires claude: true');
+  }
+  if (allowCodexCommands && !codex) {
+    throw new TypeError('allowCodexCommands requires codex: true');
   }
   if (packageManager !== undefined && packageManager !== 'npm' && packageManager !== 'pnpm') {
     throw new TypeError('packageManager must be npm or pnpm');
   }
-  if (packageManager !== undefined && !allowClaudeCommands) {
-    throw new TypeError('packageManager requires allowClaudeCommands: true');
+  if (packageManager !== undefined && !allowClaudeCommands && !allowCodexCommands) {
+    throw new TypeError('packageManager requires allowClaudeCommands or allowCodexCommands: true');
   }
 
   const root = path.resolve(cwd);
@@ -106,12 +124,17 @@ export async function installSkill({
   const permissionPlan = allowClaudeCommands
     ? await prepareClaudeCommandPermission(root)
     : undefined;
+  const codexPlan = allowCodexCommands ? await prepareCodexCommandPermission(root) : undefined;
   const contents = await readFile(path.join(getSkillPath(), 'SKILL.md'));
   const installed = await copySkill(destination, contents);
   const result: InstallSkillResult = { path: destination, installed };
   if (permissionPlan) {
     result.globalCLI = await ensureGlobalCLI(packageManager);
     result.claudePermissions = await permissionPlan.apply();
+  }
+  if (codexPlan) {
+    result.globalCLI = await ensureGlobalCLI(packageManager);
+    result.codexPermissions = await codexPlan.apply();
   }
   return result;
 }

@@ -18,6 +18,7 @@ import {
   installSkill,
   type InstallSkillOptions,
   type ClaudePermissionResult,
+  type CodexPermissionResult,
   type GlobalCLIResult,
   type SkillPackageManager,
 } from '@playgroundvibes/cli/skills';
@@ -39,6 +40,15 @@ const claudeInstallation: InstallSkillOptions = {
   allowClaudeCommands: true,
   packageManager: 'pnpm',
 };
+const codexInstallation: InstallSkillOptions = {
+  cwd: '/project',
+  codex: true,
+  allowCodexCommands: true,
+};
+async function installForCodex(): Promise<CodexPermissionResult | undefined> {
+  return (await installSkill(codexInstallation)).codexPermissions;
+}
+void installForCodex;
 async function installForClaude(): Promise<ClaudePermissionResult | undefined> {
   return (await installSkill(claudeInstallation)).claudePermissions;
 }

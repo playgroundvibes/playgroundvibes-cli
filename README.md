@@ -236,6 +236,26 @@ Existing settings, including other allow, ask, and deny rules, are preserved. Re
 
 After setup, use `playgroundvibes` directly: the rule does not match `npx` or `pnpm dlx` invocations. The initial setup still requires normal host approval or running the command yourself in a terminal. If pnpm reports that its global bin directory is not on PATH, run `pnpm setup`, reopen the terminal, and retry; the installer does not edit shell profiles or use sudo. Claude's deny rules and other host policies remain effective. See [Claude's permission rules](https://code.claude.com/docs/en/permissions).
 
+For Codex, install into `.agents/skills/playground-upload`, where Codex discovers project skills:
+
+```sh
+npx @playgroundvibes/cli@latest skill install --codex
+```
+
+It asks the same question (default **No**); `--allow-codex-commands` skips the prompt for scripted setup. When accepted, it ensures the global CLI exactly as for Claude and then writes `.codex/rules/playgroundvibes.rules`:
+
+```python
+prefix_rule(
+    pattern = ["playgroundvibes"],
+    decision = "allow",
+    justification = "Playground Vibes CLI; uploads still require an approved review digest",
+)
+```
+
+An existing, different rules file at that path is preserved and reported as a conflict. Codex loads project `.codex/` rules only for trusted projects. See [Codex rules](https://developers.openai.com/codex/rules). `--claude` and `--codex` cannot be combined in one run; run the installer once for each agent.
+
+Unrecognized `--options` are ignored with a warning on stderr instead of failing, so newer flags passed to an older CLI do not break setup. Unknown commands, missing values, invalid values, and duplicate flags are still errors.
+
 Command access does not approve a project's publication. The CLI still scans and reviews files and requires publication consent before uploading.
 
 For an existing global installation:

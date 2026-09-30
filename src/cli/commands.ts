@@ -5,7 +5,7 @@ import { getSkillPath, installSkill } from '../skills/install.js';
 import type { CLIArguments } from './arguments.js';
 import { requirePublicationConsent } from './consent.js';
 import { printHelp, printJson, printReview } from './output.js';
-import { confirmClaudeCommands } from './skill-permissions.js';
+import { confirmAgentCommands } from './skill-permissions.js';
 
 async function openBrowser(url: string): Promise<void> {
   let executable: string;
@@ -51,13 +51,18 @@ export async function executeCommand({ configDir, command }: CLIArguments): Prom
       return;
     case 'skill-install': {
       const allowClaudeCommands =
-        command.allowClaudeCommands || (command.claude && (await confirmClaudeCommands()));
+        command.allowClaudeCommands || (command.claude && (await confirmAgentCommands('claude')));
+      const allowCodexCommands =
+        command.allowCodexCommands || (command.codex && (await confirmAgentCommands('codex')));
       printJson(
         await installSkill({
           directory: command.directory,
           claude: command.claude,
           allowClaudeCommands,
-          packageManager: allowClaudeCommands ? command.packageManager : undefined,
+          codex: command.codex,
+          allowCodexCommands,
+          packageManager:
+            allowClaudeCommands || allowCodexCommands ? command.packageManager : undefined,
         }),
       );
       return;

@@ -1,12 +1,27 @@
 import path from 'node:path';
 import { createInterface } from 'node:readline';
 import { CLAUDE_COMMAND_PERMISSION } from '../skills/claude-permissions.js';
+import { CODEX_COMMAND_RULE, CODEX_RULES_FILE } from '../skills/codex-permissions.js';
+
+export type SkillAgent = 'claude' | 'codex';
+
+const AGENTS = {
+  claude: {
+    title: 'Claude',
+    change: `merges ${CLAUDE_COMMAND_PERMISSION} into .claude/settings.local.json.`,
+  },
+  codex: {
+    title: 'Codex',
+    change: `adds ${CODEX_COMMAND_RULE} in ${CODEX_RULES_FILE}.`,
+  },
+} as const;
 
 /** Ask a terminal user before enabling global commands and project-local permissions. */
-export async function confirmClaudeCommands(): Promise<boolean> {
+export async function confirmAgentCommands(agent: SkillAgent): Promise<boolean> {
+  const { title, change } = AGENTS[agent];
   if (!process.stdin.isTTY || !process.stderr.isTTY) {
     process.stderr.write(
-      'Claude command permissions were not requested. To enable them for this project, run: npx @playgroundvibes/cli@latest skill install --claude --allow-claude-commands\n',
+      `${title} command permissions were not requested. To enable them for this project, run: npx @playgroundvibes/cli@latest skill install --${agent} --allow-${agent}-commands\n`,
     );
     return false;
   }
@@ -33,9 +48,9 @@ export async function confirmClaudeCommands(): Promise<boolean> {
       [
         `Current project: ${JSON.stringify(path.resolve(process.cwd()))}`,
         'This installs the matching @playgroundvibes/cli version globally if needed',
-        `and merges ${CLAUDE_COMMAND_PERMISSION} into .claude/settings.local.json.`,
+        `and ${change}`,
         'Existing settings are preserved. Publishing still requires your consent.',
-        'Allow Claude to run playgroundvibes commands for this project? [y/N] ',
+        `Allow ${title} to run playgroundvibes commands for this project? [y/N] `,
       ].join('\n'),
     );
   });

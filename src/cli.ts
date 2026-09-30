@@ -6,7 +6,9 @@ import { printError } from './cli/output.js';
 
 const args = process.argv.slice(2);
 try {
-  await executeCommand(parseArguments(args));
+  const parsed = parseArguments(args);
+  for (const warning of parsed.warnings ?? []) process.stderr.write(`Warning: ${warning}\n`);
+  await executeCommand(parsed);
 } catch (error) {
   printError(error, args.includes('--json'));
   process.exitCode = 1;

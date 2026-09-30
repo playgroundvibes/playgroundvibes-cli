@@ -15,6 +15,8 @@ export type CLICommand =
       directory?: string;
       claude: boolean;
       allowClaudeCommands: boolean;
+      codex: boolean;
+      allowCodexCommands: boolean;
       packageManager?: 'npm' | 'pnpm';
     }
   | DeployArguments;
@@ -22,6 +24,16 @@ export type CLICommand =
 export interface CLIArguments {
   configDir?: string;
   command: CLICommand;
+  /** Unrecognized --options that were ignored rather than treated as errors. */
+  warnings?: string[];
+}
+
+/** Ignore unrecognized long options with a warning; anything else is still an error. */
+function ignoreUnknown(argument: string, command: string, warnings: string[]): void {
+  if (!argument.startsWith('--') || argument === '--') {
+    throw new Error(`Unexpected argument for ${command}: ${argument}`);
+  }
+  warnings.push(`Ignoring unrecognized option for ${command}: ${argument}`);
 }
 
 function takeValue(args: string[], index: number, flag: string): { value: string; index: number } {
@@ -50,23 +62,25 @@ function parseGlobals(args: string[]): { configDir?: string; args: string[] } {
   return { configDir, args: remaining };
 }
 
-function requireNoArguments(args: string[], command: string): void {
-  if (args.length > 0) throw new Error(`Unexpected argument for ${command}: ${args[0]}`);
+function requireNoArguments(args: string[], command: string, warnings: string[]): void {
+  for (const argument of args) ignoreUnknown(argument, command, warnings);
 }
 
-function parseSkill(args: string[]): CLICommand {
+function parseSkill(args: string[], warnings: string[]): CLICommand {
   const [action, ...rest] = args;
   if (action === 'path') {
-    requireNoArguments(rest, 'skill path');
+    requireNoArguments(rest, 'skill path', warnings);
     return { name: 'skill-path' };
   }
   if (action !== 'install')
     throw new Error(
-      'Expected "skill path" or "skill install [--path DIR] [--claude] [--allow-claude-commands] [--package-manager npm|pnpm]".',
+      'Expected "skill path" or "skill install [--path DIR] [--claude|--codex] [--allow-claude-commands|--allow-codex-commands] [--package-manager npm|pnpm]".',
     );
   let directory: string | undefined;
   let claude = false;
   let allowClaudeCommands = false;
+  let codex = false;
+  let allowCodexCommands = false;
   let packageManager: 'npm' | 'pnpm' | undefined;
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index]!;
@@ -77,6 +91,12 @@ function parseSkill(args: string[]): CLICommand {
       if (allowClaudeCommands)
         throw new Error('--allow-claude-commands may only be specified once.');
       allowClaudeCommands = true;
+    } else if (argument === '--codex') {
+      if (codex) throw new Error('--codex may only be specified once.');
+      codex = true;
+    } else if (argument === '--allow-codex-commands') {
+      if (allowCodexCommands) throw new Error('--allow-codex-commands may only be specified once.');
+      allowCodexCommands = true;
     } else if (argument === '--path' || argument.startsWith('--path=')) {
       if (directory !== undefined) throw new Error('--path may only be specified once.');
       const parsed = takeValue(rest, index, '--path');
@@ -92,32 +112,50 @@ function parseSkill(args: string[]): CLICommand {
       packageManager = parsed.value;
       index = parsed.index;
     } else {
-      throw new Error(`Unexpected argument for skill install: ${argument}`);
+      ignoreUnknown(argument, 'skill install', warnings);
     }
+  }
+  if (claude && codex) {
+    throw new Error('--claude and --codex cannot be combined; run skill install once for each.');
   }
   if (allowClaudeCommands && !claude) {
     throw new Error('--allow-claude-commands requires --claude.');
   }
-  if (packageManager !== undefined && !claude) {
-    throw new Error('--package-manager requires --claude.');
+  if (allowCodexCommands && !codex) {
+    throw new Error('--allow-codex-commands requires --codex.');
   }
-  return { name: 'skill-install', directory, claude, allowClaudeCommands, packageManager };
+  if (packageManager !== undefined && !claude && !codex) {
+    throw new Error('--package-manager requires --claude or --codex.');
+  }
+  return {
+    name: 'skill-install',
+    directory,
+    claude,
+    allowClaudeCommands,
+    codex,
+    allowCodexCommands,
+    packageManager,
+  };
 }
 
-function parseDeploy(args: string[]): DeployArguments {
+function parseDeploy(args: string[], warnings: string[]): DeployArguments {
   let dryRun = false;
   let json = false;
   let consent: string | undefined;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
-    if (argument === '--dry-run' && !dryRun) dryRun = true;
-    else if (argument === '--json' && !json) json = true;
-    else if (argument === '--consent' || argument.startsWith('--consent=')) {
+    if (argument === '--dry-run') {
+      if (dryRun) throw new Error('--dry-run may only be specified once.');
+      dryRun = true;
+    } else if (argument === '--json') {
+      if (json) throw new Error('--json may only be specified once.');
+      json = true;
+    } else if (argument === '--consent' || argument.startsWith('--consent=')) {
       if (consent !== undefined) throw new Error('--consent may only be specified once.');
       const parsed = takeValue(args, index, '--consent');
       consent = parsed.value;
       index = parsed.index;
-    } else throw new Error(`Unexpected argument for deploy: ${argument}`);
+    } else ignoreUnknown(argument, 'deploy', warnings);
   }
   if (dryRun && consent !== undefined)
     throw new Error('--dry-run cannot be combined with --consent.');
@@ -130,39 +168,55 @@ export function parseArguments(args: string[]): CLIArguments {
     return { command: { name: 'help' } };
   }
   const parsed = parseGlobals(args);
-  const [name, ...rest] = parsed.args;
+  const warnings: string[] = [];
+  const positional = [...parsed.args];
+  while (positional[0]?.startsWith('--') && positional[0] !== '--version') {
+    ignoreUnknown(positional.shift()!, 'playgroundvibes', warnings);
+  }
+  const [name, ...rest] = positional;
   let command: CLICommand;
   switch (name) {
     case '--version':
     case '-v':
-      requireNoArguments(rest, name);
+      requireNoArguments(rest, name, warnings);
       command = { name: 'version' };
       break;
     case 'skill':
-      command = parseSkill(rest);
+      command = parseSkill(rest, warnings);
       break;
-    case 'login':
-      if (rest.length > 1 || (rest.length === 1 && rest[0] !== '--no-browser')) {
-        throw new Error('Usage: playgroundvibes login [--no-browser]');
+    case 'login': {
+      let noBrowser = false;
+      for (const argument of rest) {
+        if (argument === '--no-browser' && !noBrowser) noBrowser = true;
+        else if (argument === '--no-browser' || !argument.startsWith('--')) {
+          throw new Error('Usage: playgroundvibes login [--no-browser]');
+        } else ignoreUnknown(argument, name, warnings);
       }
-      command = { name, noBrowser: rest.includes('--no-browser') };
+      command = { name, noBrowser };
       break;
-    case 'connect':
-      if (rest.length !== 1 || !rest[0] || rest[0].startsWith('-')) {
+    }
+    case 'connect': {
+      const positional: string[] = [];
+      for (const argument of rest) {
+        if (argument.startsWith('--')) ignoreUnknown(argument, name, warnings);
+        else positional.push(argument);
+      }
+      if (positional.length !== 1 || !positional[0] || positional[0].startsWith('-')) {
         throw new Error('Usage: playgroundvibes connect CODE');
       }
-      command = { name, code: rest[0] };
+      command = { name, code: positional[0] };
       break;
+    }
     case 'whoami':
     case 'logout':
-      requireNoArguments(rest, name);
+      requireNoArguments(rest, name, warnings);
       command = { name };
       break;
     case 'deploy':
-      command = parseDeploy(rest);
+      command = parseDeploy(rest, warnings);
       break;
     default:
       throw new Error(`Unknown command: ${name ?? '(missing)'}. Run playgroundvibes --help.`);
   }
-  return { configDir: parsed.configDir, command };
+  return { configDir: parsed.configDir, command, warnings };
 }

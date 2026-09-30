@@ -34,6 +34,7 @@ export type {
   InstallSkillOptions,
   InstallSkillResult,
   ClaudePermissionResult,
+  CodexPermissionResult,
   GlobalCLIResult,
   SkillPackageManager,
 } from './skills/install.js';

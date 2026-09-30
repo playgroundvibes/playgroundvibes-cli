@@ -10,7 +10,8 @@ Commands:
   deploy [--dry-run] [--json] [--consent SHA256]
                           Review this project's files and publish with consent
   skill path              Print the bundled agent skill directory
-  skill install [--path DIR] [--claude] [--allow-claude-commands]
+  skill install [--path DIR] [--claude|--codex]
+                [--allow-claude-commands|--allow-codex-commands]
                 [--package-manager npm|pnpm]
                           Install the skill (default: .agents/skills/playground-upload)
 
@@ -53,8 +54,17 @@ Bash(playgroundvibes:*) into the project's .claude/settings.local.json.
 Declining or running without a terminal installs only the skill.
 With --claude, --allow-claude-commands enables setup without prompting.
 Setup uses the invoking npm/pnpm automatically; --package-manager npm|pnpm
-overrides that choice and requires --claude.
+overrides that choice and requires --claude or --codex.
+
+skill install --codex uses .agents/skills/playground-upload (where Codex reads
+project skills) unless --path is set, and asks the same [y/N] question. Accepting
+ensures the global CLI, then writes .codex/rules/playgroundvibes.rules with
+prefix_rule(pattern = ["playgroundvibes"], decision = "allow"). An existing
+different rules file is preserved and reported. Codex loads project rules only
+for trusted projects. --allow-codex-commands enables setup without prompting.
 This permission setup does not grant publication consent.
+
+Unrecognized --options are ignored with a warning instead of failing.
 `;
 
 export function printHelp(): void {

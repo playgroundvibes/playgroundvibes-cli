@@ -234,22 +234,16 @@ test('unknown commands and invalid options fail before an account or deploy oper
   };
   for (const args of [
     ['unknown'],
-    ['deploy', '--yes'],
-    ['deploy', '--unknown'],
     ['deploy', '--consent'],
     ['deploy', '--dry-run', '--consent', digest],
     ['deploy', '--json', '--json'],
     ['--config-dir'],
     ['connect'],
     ['connect', 'one', 'two'],
-    ['whoami', '--unexpected'],
     ['logout', 'extra'],
-    ['login', '--unexpected'],
     ['skill', 'path', 'extra'],
-    ['skill', 'install', '--unknown'],
     ['skill', 'install', '--path'],
     ['skill', 'install', '--claude', '--claude'],
-    ['skill', 'install', '--claude=false'],
     ['skill', 'install', '--allow-claude-commands'],
     ['skill', 'install', '--allow-claude-commands', '--path', 'invalid-target'],
     ['skill', 'install', '--claude', '--allow-claude-commands', '--allow-claude-commands'],
@@ -268,7 +262,16 @@ test('unknown commands and invalid options fail before an account or deploy oper
       '--package-manager',
       'pnpm',
     ],
-    ['skill', 'path', '--claude'],
+    ['deploy', '--dry-run', '--dry-run'],
+    ['deploy', 'positional'],
+    ['whoami', 'extra'],
+    ['login', '--no-browser', '--no-browser'],
+    ['skill', 'install', '--codex', '--codex'],
+    ['skill', 'install', '--claude', '--codex'],
+    ['skill', 'install', '--allow-codex-commands'],
+    ['skill', 'install', '--claude', '--allow-codex-commands'],
+    ['skill', 'install', '--codex', '--allow-claude-commands'],
+    ['skill', 'install', '--codex', '--package-manager', 'yarn'],
     ['skill', 'unknown'],
   ]) {
     const result = invoke(args, options);
@@ -279,6 +282,81 @@ test('unknown commands and invalid options fail before an account or deploy oper
   assert.deepEqual(await globalCLI.calls(), []);
   for (const destination of ['.agents', '.claude', 'invalid-target']) {
     await assert.rejects(access(path.join(mock.directory, destination)), { code: 'ENOENT' });
+  }
+});
+
+test('unrecognized long options are ignored with a warning instead of failing', async (t) => {
+  const globalCLI = await mockedGlobalCLI(t);
+  const { directory, options } = globalCLI;
+  const result = invoke(['--future-global', 'skill', 'install', '--unknown', '--x=1'], options);
+  assert.equal(result.status, 0, result.stderr);
+  assert.match(
+    result.stderr,
+    /Warning: Ignoring unrecognized option for playgroundvibes: --future-global/,
+  );
+  assert.match(result.stderr, /Warning: Ignoring unrecognized option for skill install: --unknown/);
+  assert.match(result.stderr, /--x=1/);
+  assert.deepEqual(events(result), [
+    { path: path.join(directory, '.agents/skills/playground-upload'), installed: true },
+  ]);
+  for (const args of [
+    ['skill', 'path', '--claude'],
+    ['--version', '--unknown'],
+  ]) {
+    const ignored = invoke(args, options);
+    assert.equal(ignored.status, 0, ignored.stderr);
+    assert.match(ignored.stderr, /Ignoring unrecognized option/);
+  }
+  assert.deepEqual(await globalCLI.calls(), []);
+});
+
+test('Codex skill installation uses .agents and adds project rules only when allowed', async (t) => {
+  const rulesRelative = '.codex/rules/playgroundvibes.rules';
+  const rule = 'prefix_rule(pattern = ["playgroundvibes"], decision = "allow")';
+  {
+    const globalCLI = await mockedGlobalCLI(t);
+    const { directory, options } = globalCLI;
+    const result = invoke(['skill', 'install', '--codex'], options);
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /--allow-codex-commands/);
+    assert.deepEqual(events(result), [
+      { path: path.join(directory, '.agents/skills/playground-upload'), installed: true },
+    ]);
+    await assert.rejects(access(path.join(directory, '.codex')), { code: 'ENOENT' });
+    assert.deepEqual(await globalCLI.calls(), []);
+  }
+  {
+    const globalCLI = await mockedGlobalCLI(t, { tty: true });
+    const { directory, options } = globalCLI;
+    const result = invoke(['skill', 'install', '--codex', '--package-manager', 'pnpm'], {
+      ...options,
+      input: 'y\n',
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.match(result.stderr, /Allow Codex to run playgroundvibes commands/);
+    const rulesPath = path.join(directory, rulesRelative);
+    assert.deepEqual(events(result), [
+      {
+        path: path.join(directory, '.agents/skills/playground-upload'),
+        installed: true,
+        globalCLI: { ...globalCLI.result, packageManager: 'pnpm' },
+        codexPermissions: { path: rulesPath, added: true, rule },
+      },
+    ]);
+    const contents = await readFile(rulesPath, 'utf8');
+    assert.match(contents, /pattern = \["playgroundvibes"\]/);
+    assert.match(contents, /decision = "allow"/);
+
+    const again = invoke(['skill', 'install', '--codex', '--allow-codex-commands'], options);
+    assert.equal(again.status, 0, again.stderr);
+    assert.equal(events(again)[0].codexPermissions.added, false);
+    assert.equal(await readFile(rulesPath, 'utf8'), contents);
+
+    await writeFile(rulesPath, 'prefix_rule(pattern = ["git"], decision = "prompt")\n');
+    const conflict = invoke(['skill', 'install', '--codex', '--allow-codex-commands'], options);
+    assert.equal(conflict.status, 1);
+    assert.match(conflict.stderr, /Refusing to overwrite different existing Codex rules/);
+    assert.match(await readFile(rulesPath, 'utf8'), /"git"/);
   }
 });
 
