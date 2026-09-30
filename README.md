@@ -254,6 +254,14 @@ prefix_rule(
 
 An existing, different rules file at that path is preserved and reported as a conflict. Codex loads project `.codex/` rules only for trusted projects. See [Codex rules](https://developers.openai.com/codex/rules). `--claude` and `--codex` cannot be combined in one run; run the installer once for each agent.
 
+To sign the CLI in during setup, pass the pairing code generated on Playground:
+
+```sh
+npx @playgroundvibes/cli@latest skill install --claude --pairing-code=ABCD-2345
+```
+
+The code is redeemed first, exactly like `playgroundvibes connect CODE`, and the connection is saved in the private configuration directory shared with the global `playgroundvibes` command. If the code is invalid or expired, setup stops before installing anything. `--pairing-code` works with `--claude`, `--codex`, or plain `skill install`, and the JSON result includes the `connection`.
+
 Unrecognized `--options` are ignored with a warning on stderr instead of failing, so newer flags passed to an older CLI do not break setup. Unknown commands, missing values, invalid values, and duplicate flags are still errors.
 
 Command access does not approve a project's publication. The CLI still scans and reviews files and requires publication consent before uploading.

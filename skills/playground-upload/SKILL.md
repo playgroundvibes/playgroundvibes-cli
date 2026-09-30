@@ -41,7 +41,7 @@ Source files allow 50 MiB each, 50 MiB total, and 2,000 files; builds allow 3 Mi
 
 ## Connect and obtain consent
 
-Use `playgroundvibes whoami` to inspect the connection. When needed, let the human obtain a pairing code using `playgroundvibes login`, then connect with `playgroundvibes connect CODE`. A permanent credential must never enter the repository, conversation, or export. Keep private configuration outside the project.
+Use `playgroundvibes whoami` to inspect the connection. When needed, let the human obtain a pairing code using `playgroundvibes login`, then connect with `playgroundvibes connect CODE`. Setup can also connect in one step with `skill install --pairing-code CODE`; let the human run that command so the code stays out of the conversation. A permanent credential must never enter the repository, conversation, or export. Keep private configuration outside the project.
 
 Run `playgroundvibes deploy --json` to obtain the account-bound review. This checks the connected account with Playground, but sends no project contents. Without consent it deliberately returns a review followed by a consent-required error; this is the expected review stage. Show the user the destination/account, selected project, included source/build/cover files and metadata, exclusions, and the fact that source will be sent and the listing/preview published immediately.
 

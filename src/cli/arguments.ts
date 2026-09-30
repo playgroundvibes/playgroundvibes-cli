@@ -18,6 +18,8 @@ export type CLICommand =
       codex: boolean;
       allowCodexCommands: boolean;
       packageManager?: 'npm' | 'pnpm';
+      /** Pairing code redeemed before installing, so the CLI starts connected. */
+      pairingCode?: string;
     }
   | DeployArguments;
 
@@ -74,7 +76,7 @@ function parseSkill(args: string[], warnings: string[]): CLICommand {
   }
   if (action !== 'install')
     throw new Error(
-      'Expected "skill path" or "skill install [--path DIR] [--claude|--codex] [--allow-claude-commands|--allow-codex-commands] [--package-manager npm|pnpm]".',
+      'Expected "skill path" or "skill install [--path DIR] [--claude|--codex] [--allow-claude-commands|--allow-codex-commands] [--package-manager npm|pnpm] [--pairing-code CODE]".',
     );
   let directory: string | undefined;
   let claude = false;
@@ -82,6 +84,7 @@ function parseSkill(args: string[], warnings: string[]): CLICommand {
   let codex = false;
   let allowCodexCommands = false;
   let packageManager: 'npm' | 'pnpm' | undefined;
+  let pairingCode: string | undefined;
   for (let index = 0; index < rest.length; index += 1) {
     const argument = rest[index]!;
     if (argument === '--claude') {
@@ -111,6 +114,14 @@ function parseSkill(args: string[], warnings: string[]): CLICommand {
       }
       packageManager = parsed.value;
       index = parsed.index;
+    } else if (argument === '--pairing-code' || argument.startsWith('--pairing-code=')) {
+      if (pairingCode !== undefined) throw new Error('--pairing-code may only be specified once.');
+      const parsed = takeValue(rest, index, '--pairing-code');
+      if (!/^[A-Z2-9]{8}$/.test(parsed.value.trim().toUpperCase().replace(/-/g, ''))) {
+        throw new Error('--pairing-code must be the eight-character pairing code from Playground.');
+      }
+      pairingCode = parsed.value;
+      index = parsed.index;
     } else {
       ignoreUnknown(argument, 'skill install', warnings);
     }
@@ -135,6 +146,7 @@ function parseSkill(args: string[], warnings: string[]): CLICommand {
     codex,
     allowCodexCommands,
     packageManager,
+    pairingCode,
   };
 }
 

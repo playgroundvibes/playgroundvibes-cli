@@ -50,21 +50,25 @@ export async function executeCommand({ configDir, command }: CLIArguments): Prom
       process.stdout.write(`${getSkillPath()}\n`);
       return;
     case 'skill-install': {
+      // Redeem first: codes expire quickly, and a failed pairing should not leave a half setup.
+      const connection =
+        command.pairingCode === undefined
+          ? undefined
+          : await createPlaygroundClient({ configDir }).connect(command.pairingCode);
       const allowClaudeCommands =
         command.allowClaudeCommands || (command.claude && (await confirmAgentCommands('claude')));
       const allowCodexCommands =
         command.allowCodexCommands || (command.codex && (await confirmAgentCommands('codex')));
-      printJson(
-        await installSkill({
-          directory: command.directory,
-          claude: command.claude,
-          allowClaudeCommands,
-          codex: command.codex,
-          allowCodexCommands,
-          packageManager:
-            allowClaudeCommands || allowCodexCommands ? command.packageManager : undefined,
-        }),
-      );
+      const installed = await installSkill({
+        directory: command.directory,
+        claude: command.claude,
+        allowClaudeCommands,
+        codex: command.codex,
+        allowCodexCommands,
+        packageManager:
+          allowClaudeCommands || allowCodexCommands ? command.packageManager : undefined,
+      });
+      printJson(connection ? { ...installed, connection } : installed);
       return;
     }
   }

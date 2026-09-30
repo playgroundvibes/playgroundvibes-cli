@@ -12,7 +12,7 @@ Commands:
   skill path              Print the bundled agent skill directory
   skill install [--path DIR] [--claude|--codex]
                 [--allow-claude-commands|--allow-codex-commands]
-                [--package-manager npm|pnpm]
+                [--package-manager npm|pnpm] [--pairing-code CODE]
                           Install the skill (default: .agents/skills/playground-upload)
 
 Options:
@@ -63,6 +63,11 @@ prefix_rule(pattern = ["playgroundvibes"], decision = "allow"). An existing
 different rules file is preserved and reported. Codex loads project rules only
 for trusted projects. --allow-codex-commands enables setup without prompting.
 This permission setup does not grant publication consent.
+
+skill install --pairing-code CODE connects this computer to your Playground
+account first (like "connect CODE"), so the CLI is signed in once setup finishes.
+If the code is invalid or expired, nothing is installed. It combines with any
+other skill install option.
 
 Unrecognized --options are ignored with a warning instead of failing.
 `;

@@ -147,7 +147,11 @@ export function createPlaygroundClient(options = {}) {
   record('create', { options });
   return {
     loginUrl: 'https://playgroundvibes.com/#new',
-    async connect(code) { record('connect', { code }); return { connected: true }; },
+    async connect(code) {
+      record('connect', { code });
+      if (code.startsWith('EXPD')) throw new Error('Pairing code expired or was already used.');
+      return { connected: true };
+    },
     async whoami() { record('whoami'); return { accountId: 'reviewed-account' }; },
     async logout() { record('logout'); return { loggedOut: true }; },
     async inspect() { record('inspect'); return reviewed; },
@@ -272,6 +276,9 @@ test('unknown commands and invalid options fail before an account or deploy oper
     ['skill', 'install', '--claude', '--allow-codex-commands'],
     ['skill', 'install', '--codex', '--allow-claude-commands'],
     ['skill', 'install', '--codex', '--package-manager', 'yarn'],
+    ['skill', 'install', '--claude', '--pairing-code'],
+    ['skill', 'install', '--claude', '--pairing-code=abc-1'],
+    ['skill', 'install', '--pairing-code', 'ABCD-2345', '--pairing-code', 'ABCD-2345'],
     ['skill', 'unknown'],
   ]) {
     const result = invoke(args, options);
@@ -308,6 +315,53 @@ test('unrecognized long options are ignored with a warning instead of failing', 
     assert.match(ignored.stderr, /Ignoring unrecognized option/);
   }
   assert.deepEqual(await globalCLI.calls(), []);
+});
+
+test('skill install redeems a pairing code before installing so the CLI starts connected', async (t) => {
+  const mock = await mockedClient(t);
+  const globalCLI = await mockedGlobalCLI(t);
+  const options = {
+    ...mock.options,
+    nodeArgs: [...mock.options.nodeArgs, ...globalCLI.options.nodeArgs],
+  };
+  const result = invoke(
+    [
+      '--config-dir',
+      'custom-config',
+      'skill',
+      'install',
+      '--claude',
+      '--allow-claude-commands',
+      '--pairing-code=ABCD-2345',
+    ],
+    options,
+  );
+  assert.equal(result.status, 0, result.stderr);
+  const [output] = events(result);
+  assert.deepEqual(output.connection, { connected: true });
+  assert.equal(output.path, path.join(mock.directory, '.claude/skills/playground-upload'));
+  assert.equal(output.installed, true);
+  assert.deepEqual(await mock.calls(), [
+    { method: 'create', options: { configDir: 'custom-config' } },
+    { method: 'connect', code: 'ABCD-2345' },
+  ]);
+  assert.equal((await globalCLI.calls()).length, 1);
+
+  const plain = invoke(
+    ['skill', 'install', '--pairing-code', 'wxyz2345', '--path', 'plain'],
+    options,
+  );
+  assert.equal(plain.status, 0, plain.stderr);
+  assert.deepEqual(events(plain)[0].connection, { connected: true });
+  assert.deepEqual((await mock.calls()).at(-1), { method: 'connect', code: 'wxyz2345' });
+
+  const expired = invoke(
+    ['skill', 'install', '--pairing-code', 'EXPD-2345', '--path', 'expired'],
+    options,
+  );
+  assert.equal(expired.status, 1);
+  assert.match(expired.stderr || expired.stdout, /expired/);
+  await assert.rejects(access(path.join(mock.directory, 'expired')), { code: 'ENOENT' });
 });
 
 test('Codex skill installation uses .agents and adds project rules only when allowed', async (t) => {
