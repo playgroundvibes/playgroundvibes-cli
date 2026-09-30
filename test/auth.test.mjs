@@ -76,6 +76,102 @@ test('retrying a lost pairing response reuses the pending token hash', async (t)
   await assert.rejects(fs.stat(path.join(configDir, 'pairing.json')), { code: 'ENOENT' });
 });
 
+test('connect keeps valid saved credentials without redeeming the pairing code', async (t) => {
+  const { configDir, credential } = await fixture(t);
+  await writeJSON(credential, { origin: ORIGIN, token, account_id: 'account-1' });
+  const calls = [];
+  const auth = createAuth({
+    configDir,
+    request: async (endpoint, _body, suppliedToken) => {
+      calls.push({ endpoint, suppliedToken });
+      if (endpoint.endsWith('/status')) return { status: 'connected', account_id: 'account-1' };
+      throw new Error('Pairing must not be redeemed');
+    },
+  });
+  const result = await auth.connect('ABCD2345');
+  assert.deepEqual(result, {
+    status: 'connected',
+    account_id: 'account-1',
+    already_connected: true,
+  });
+  assert.equal(Object.isFrozen(result), true);
+  assert.deepEqual(calls, [{ endpoint: '/api/assistant/status', suppliedToken: token }]);
+  assert.deepEqual(await readPrivateJSON(credential), {
+    origin: ORIGIN,
+    token,
+    account_id: 'account-1',
+  });
+  await assert.rejects(fs.stat(path.join(configDir, 'pairing.json')), { code: 'ENOENT' });
+});
+
+test('connect replaces revoked, changed, or unusable saved credentials', async (t) => {
+  const { configDir, credential } = await fixture(t);
+  const cases = [
+    {
+      saved: { origin: ORIGIN, token, account_id: 'account-1' },
+      status: () => {
+        throw new APIError('Unauthorized', 401);
+      },
+    },
+    {
+      saved: { origin: ORIGIN, token, account_id: 'account-1' },
+      status: () => {
+        throw new APIError('Forbidden', 403);
+      },
+    },
+    {
+      saved: { origin: ORIGIN, token, account_id: 'account-1' },
+      status: () => ({ status: 'expired', account_id: 'account-1' }),
+    },
+    {
+      saved: { origin: ORIGIN, token, account_id: 'account-1' },
+      status: () => ({ status: 'connected', account_id: 'other' }),
+    },
+    {
+      saved: { origin: ORIGIN, token: 'not-a-token', account_id: 'account-1' },
+      status: () => assert.fail('No status check for unusable files'),
+    },
+  ];
+  for (const { saved, status } of cases) {
+    await writeJSON(credential, saved);
+    const auth = createAuth({
+      configDir,
+      request: async (endpoint) => {
+        if (endpoint.endsWith('/status')) return status();
+        if (endpoint.endsWith('/pair-redeem')) return { account_id: 'account-2' };
+        throw new Error('Unexpected endpoint');
+      },
+    });
+    const result = await auth.connect('ABCD2345');
+    assert.deepEqual(result, { status: 'connected', account_id: 'account-2' });
+    const stored = await readPrivateJSON(credential);
+    assert.equal(stored.account_id, 'account-2');
+    assert.match(stored.token, /^pgimport_[a-f0-9]{64}$/);
+    assert.notEqual(stored.token, token);
+  }
+});
+
+test('connect keeps saved credentials and the pairing code when validity cannot be checked', async (t) => {
+  const { configDir, credential } = await fixture(t);
+  await writeJSON(credential, { origin: ORIGIN, token, account_id: 'account-1' });
+  for (const failure of [new APIError('Service unavailable', 503), new Error('fetch failed')]) {
+    const endpoints = [];
+    const auth = createAuth({
+      configDir,
+      request: async (endpoint) => {
+        endpoints.push(endpoint);
+        throw failure;
+      },
+    });
+    await assert.rejects(
+      auth.connect('ABCD2345'),
+      /Could not verify the existing Playground connection/,
+    );
+    assert.deepEqual(endpoints, ['/api/assistant/status']);
+    assert.equal((await readPrivateJSON(credential)).token, token);
+  }
+});
+
 test('public connection results whitelist validated fields and omit nested server credential echoes', async (t) => {
   const { configDir, credential } = await fixture(t);
   await writeJSON(credential, { origin: ORIGIN, token, account_id: 'account-1' });

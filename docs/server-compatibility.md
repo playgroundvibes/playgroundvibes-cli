@@ -8,12 +8,12 @@ The compatibility review on September 29, 2026 compared the owner's supplied Nod
 
 All requests are JSON POSTs to `https://playgroundvibes.com`. Authentication uses `Authorization: Bearer TOKEN`, and redirects are rejected.
 
-| Endpoint                     | Request contract                                                                                                                                                          |
-| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `/api/assistant/pair-redeem` | Normalized eight-character `code`, SHA-256 `token_hash`, and computer `label`. The generated permanent token is saved privately and is not sent in the pairing body.      |
-| `/api/assistant/status`      | Empty object and bearer token. The server must return `status: "connected"` for the saved account. A returned project restriction must agree with the local project link. |
-| `/api/assistant/disconnect`  | Empty object and bearer token. An already revoked credential can be removed locally after HTTP 401.                                                                       |
-| `/api/assistant/import`      | `version: 1`, `operation_id`, `artifact_hashes`, optional existing `project_id`, one entry in `projects`, and `more_artifacts`.                                           |
+| Endpoint                     | Request contract                                                                                                                                                                                                                                  |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/api/assistant/pair-redeem` | Normalized eight-character `code`, SHA-256 `token_hash`, and computer `label`. The generated permanent token is saved privately and is not sent in the pairing body. Only called when no saved credential passes the status check first.          |
+| `/api/assistant/status`      | Empty object and bearer token. The server must return `status: "connected"` for the saved account. A returned project restriction must agree with the local project link. Before pairing, HTTP 401/403 marks the saved credential as replaceable. |
+| `/api/assistant/disconnect`  | Empty object and bearer token. An already revoked credential can be removed locally after HTTP 401.                                                                                                                                               |
+| `/api/assistant/import`      | `version: 1`, `operation_id`, `artifact_hashes`, optional existing `project_id`, one entry in `projects`, and `more_artifacts`.                                                                                                                   |
 
 Import entries contain the owner's metadata fields plus `source` and optional `build` as base64 ZIP strings. Optional `cover` contains `{ mime, data }` for a PNG/JPEG/WebP image. Artifact hashes are SHA-256 of the **base64 strings**, including `cover.data`, matching the owner CLI. They are not hashes of the raw ZIP or image bytes. File hashes shown in the review are separate inspection details.
 

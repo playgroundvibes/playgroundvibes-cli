@@ -3,6 +3,7 @@ import {
   ConsentError,
   ScanError,
   type ConnectionInfo,
+  type ConnectResult,
   type ArtifactKind,
   type DeploymentResult,
   type Manifest,
@@ -73,6 +74,9 @@ CREDENTIAL_PATTERNS[0]!.pattern = 'different';
 
 async function consumingApplication(review: Review): Promise<DeploymentResult> {
   const client = createPlaygroundClient({ cwd: '/project' });
+  const connected: ConnectResult = await client.connect('ABCD2345');
+  const kept: true | undefined = connected.already_connected;
+  void kept;
   const account: ConnectionInfo = await client.whoami();
   const id: string = account.account_id;
   void id;

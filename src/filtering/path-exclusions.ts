@@ -67,7 +67,7 @@ export const BUILT_IN_EXCLUSIONS: readonly PathExclusionRule[] = Object.freeze([
     id: 'assistant-settings',
     reason: 'local assistant settings',
     match: 'component-name',
-    patterns: ['.codex', '.claude'],
+    patterns: ['.codex', '.claude', '.agents'],
   }),
   rule({
     id: 'credential-filenames',

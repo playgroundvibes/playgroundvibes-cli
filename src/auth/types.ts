@@ -8,6 +8,14 @@ export interface ConnectionInfo {
   readonly project_id?: string | null;
 }
 
+/**
+ * Result of `connect(code)`. `already_connected` is set when saved credentials
+ * were still valid: they were kept and the pairing code was not redeemed.
+ */
+export interface ConnectResult extends ConnectionInfo {
+  readonly already_connected?: true;
+}
+
 export interface LogoutResult {
   readonly disconnected: true;
 }
@@ -25,7 +33,7 @@ export interface AuthOptions {
 /** Internal authentication boundary shared by the CLI and publishing client. */
 export interface AuthSession {
   readonly configDir: string;
-  connect(code: string): Promise<ConnectionInfo>;
+  connect(code: string): Promise<ConnectResult>;
   whoami(): Promise<ConnectionInfo>;
   logout(): Promise<LogoutResult>;
   account(): Promise<VerifiedAccount>;

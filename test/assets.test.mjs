@@ -35,11 +35,12 @@ function credentialFailure(token) {
   };
 }
 
-// Verbatim exclusion predicate from the owner's supplied src/policy.mjs.
-// Keeping this independent catches accidental additions to the readable rule table.
+// Exclusion predicate from the owner's supplied src/policy.mjs, plus `.agents`
+// (project agent skills). Keeping this independent catches accidental additions
+// to the readable rule table.
 function originalExcluded(name) {
   return (
-    /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.git|\.hg|\.svn|node_modules|vendor|\.venv|venv|__pycache__|\.cache|\.next|\.nuxt|coverage|\.playground|\.sites-runtime|\.wrangler|\.aws|\.ssh|\.gnupg|\.codex|\.claude|\.openai|\.npmrc|\.pypirc|\.netrc|credentials[^/]*|secrets?[^/]*|id_rsa|id_ed25519|service[-_]?account[^/]*)(?:\/|$)/i.test(
+    /(?:^|\/)(?:\.env(?:\.[^/]*)?|\.git|\.hg|\.svn|node_modules|vendor|\.venv|venv|__pycache__|\.cache|\.next|\.nuxt|coverage|\.playground|\.sites-runtime|\.wrangler|\.aws|\.ssh|\.gnupg|\.codex|\.claude|\.agents|\.openai|\.npmrc|\.pypirc|\.netrc|credentials[^/]*|secrets?[^/]*|id_rsa|id_ed25519|service[-_]?account[^/]*)(?:\/|$)/i.test(
       name,
     ) ||
     /\.(?:pem|key|p12|pfx|jks|keystore|log)$/i.test(name) ||
@@ -72,6 +73,7 @@ test('named exclusions match the original bundle predicate without additional pr
     '.gnupg',
     '.codex',
     '.claude',
+    '.agents',
     '.openai',
     '.npmrc',
     '.pypirc',
@@ -103,7 +105,6 @@ test('named exclusions match the original bundle predicate without additional pr
     '.config',
     '.docker',
     '.kube',
-    '.agents',
     '.cursor',
     '.aider.conf',
     '.history',
@@ -222,7 +223,6 @@ test('removed exclusions are included while original private paths remain omitte
     '.config/file',
     '.docker/file',
     '.kube/file',
-    '.agents/file',
     '.cursor/file',
     '.aider.conf',
     '.history/file',
@@ -235,6 +235,7 @@ test('removed exclusions are included while original private paths remain omitte
     '.env',
     '.aws/file',
     '.claude/file',
+    '.agents/skills/playground-upload/SKILL.md',
     'credentials.json',
     'nested/private.key',
     'users.txt',

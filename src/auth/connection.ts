@@ -3,10 +3,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { createHash, randomBytes } from 'node:crypto';
 import { getConfigDir, readPrivateJSON, writeJSON, withLock } from '../storage/local-state.js';
-import { ORIGIN, request as defaultRequest, type JsonObject } from '../api/transport.js';
+import { APIError, ORIGIN, request as defaultRequest, type JsonObject } from '../api/transport.js';
 import type {
   AuthOptions,
   AuthSession,
+  ConnectResult,
   ConnectionInfo,
   LogoutResult,
   VerifiedAccount,
@@ -103,11 +104,43 @@ export function createAuth(options: AuthOptions = {}): AuthSession {
     return Object.freeze({ ...connectionInfo(state, saved.token, true), token: saved.token });
   }
 
-  async function connect(input: string): Promise<ConnectionInfo> {
+  /**
+   * Verify saved credentials before pairing. Returns the connection when they are
+   * still valid, or null when there are none or the server rejects them. Any other
+   * failure is thrown so an undecidable check never replaces a working credential.
+   */
+  async function existingConnection(): Promise<ConnectionInfo | null> {
+    const saved = await readPrivateJSON<unknown>(credentialFile, null);
+    if (saved === null) return null;
+    let current: StoredCredential;
+    try {
+      current = await credentials();
+    } catch {
+      return null; // Unusable local file; pairing replaces it.
+    }
+    let state: JsonObject;
+    try {
+      state = await request('/api/assistant/status', {}, current.token);
+    } catch (error) {
+      if (error instanceof APIError && (error.status === 401 || error.status === 403)) return null;
+      throw new Error(
+        'Could not verify the existing Playground connection, so it was kept and the pairing code was not used. ' +
+          'Try again, or run playgroundvibes logout before connecting.',
+        { cause: error },
+      );
+    }
+    if (!isObject(state) || state.status !== 'connected' || state.account_id !== current.account_id)
+      return null;
+    return connectionInfo(state, current.token, true);
+  }
+
+  async function connect(input: string): Promise<ConnectResult> {
     const code = typeof input === 'string' ? input.trim().toUpperCase().replace(/-/g, '') : '';
     if (!/^[A-Z2-9]{8}$/.test(code))
       throw new Error('Use the eight-character pairing code from Playground.');
     return withLock(configDir, async () => {
+      const existing = await existingConnection();
+      if (existing) return Object.freeze({ ...existing, already_connected: true as const });
       const pendingFile = path.join(configDir, 'pairing.json');
       const prior = await readPrivateJSON<unknown>(pendingFile, null);
       const token =

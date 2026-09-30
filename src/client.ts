@@ -1,7 +1,7 @@
 import path from 'node:path';
 import { ORIGIN, request, type PlaygroundTransport } from './api/transport.js';
 import { createAuth } from './auth/connection.js';
-import type { ConnectionInfo, LogoutResult } from './auth/types.js';
+import type { ConnectResult, ConnectionInfo, LogoutResult } from './auth/types.js';
 import { ConsentError } from './publishing/consent.js';
 import { prepareUpload, type PreparedUpload } from './publishing/prepare.js';
 import type { DeploymentConsent, DeploymentResult, Review } from './publishing/types.js';
@@ -16,7 +16,7 @@ export interface ClientOptions {
 
 export interface PlaygroundClient {
   readonly loginUrl: string;
-  connect(code: string): Promise<ConnectionInfo>;
+  connect(code: string): Promise<ConnectResult>;
   whoami(): Promise<ConnectionInfo>;
   logout(): Promise<LogoutResult>;
   /** Inspect locally, without credentials, network requests or persistent writes. */

@@ -45,12 +45,12 @@ An explicit `cover_file` resolves relative to `.playground/` and must select a p
 | `dependencies`          | `node_modules`, `vendor`, `.venv`, `venv`, `__pycache__`                                                                                 |
 | `generated-directories` | `.cache`, `.next`, `.nuxt`, `coverage`, `.playground`, `.sites-runtime`, `.wrangler`                                                     |
 | `private-settings`      | `.aws`, `.ssh`, `.gnupg`, `.openai`, `.npmrc`, `.pypirc`, `.netrc`                                                                       |
-| `assistant-settings`    | `.codex`, `.claude`                                                                                                                      |
+| `assistant-settings`    | `.codex`, `.claude`, `.agents`                                                                                                           |
 | `credential-filenames`  | Names beginning with `credentials`, `secret`, `serviceaccount`, `service-account`, or `service_account`; exact `id_rsa` and `id_ed25519` |
 | `private-keys-and-logs` | `.pem`, `.key`, `.p12`, `.pfx`, `.jks`, `.keystore`, `.log` suffixes                                                                     |
 | `private-records`       | `conversation(s)`, `chat(s)`, `message(s)`, or `user(s)` followed by `.json`, `.jsonl`, `.html`, `.csv`, or `.txt`                       |
 
-These are the original rules, without additional editor, agent, cloud, or source-map exclusions. For example, `.agents`, `.cursor`, `.vscode`, `.envrc`, and `.map` files are not excluded merely by those names. Use `.playgroundignore` for additional source/build omissions needed by the selected project.
+These are the original rules plus `.agents`, which holds project agent skills such as the installed `playground-upload` skill. There are no other editor, agent, cloud, or source-map exclusions. For example, `.cursor`, `.vscode`, `.envrc`, and `.map` files are not excluded merely by those names. Use `.playgroundignore` for additional source/build omissions needed by the selected project.
 
 Although `.playground` is excluded from source packaging, the manifest is read separately. Final metadata and account/project destination fields receive the literal credential checks during preparation.
 

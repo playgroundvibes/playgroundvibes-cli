@@ -90,6 +90,8 @@ playgroundvibes whoami
 
 Replace the example with the eight-character pairing code generated on Playground. `login --no-browser` prints the website URL. Credentials are stored outside projects with private permissions. Use `playgroundvibes logout` to revoke this computer's connection.
 
+Before redeeming a code, `connect` runs the same check as `whoami` on any saved connection. If it is still valid, it is kept, the code is not used, and the result includes `"already_connected": true`. Missing, unreadable, revoked (HTTP 401/403), or changed-account credentials are replaced by the new pairing. If the check fails for another reason, such as a network error or server outage, `connect` stops without touching the saved connection or using the code; try again, or run `playgroundvibes logout` first to switch accounts.
+
 The default configuration directory is `~/.config/playground-vibes/cli` on macOS/Linux; `XDG_CONFIG_HOME` is respected. Windows uses `LOCALAPPDATA`, falling back to the home directory. Override with `PLAYGROUND_CONFIG_DIR` or `--config-dir DIR`. The directory must stay outside the project being uploaded.
 
 ## Prepare and review a project
@@ -260,7 +262,7 @@ To sign the CLI in during setup, pass the pairing code generated on Playground:
 npx @playgroundvibes/cli@latest skill install --claude --pairing-code=ABCD-2345
 ```
 
-The code is redeemed first, exactly like `playgroundvibes connect CODE`, and the connection is saved in the private configuration directory shared with the global `playgroundvibes` command. If the code is invalid or expired, setup stops before installing anything. `--pairing-code` works with `--claude`, `--codex`, or plain `skill install`, and the JSON result includes the `connection`.
+The code is redeemed first, exactly like `playgroundvibes connect CODE` (including keeping a still-valid saved connection instead of redeeming the code), and the connection is saved in the private configuration directory shared with the global `playgroundvibes` command. If the code is invalid or expired, setup stops before installing anything. `--pairing-code` works with `--claude`, `--codex`, or plain `skill install`, and the JSON result includes the `connection`.
 
 Unrecognized `--options` are ignored with a warning on stderr instead of failing, so newer flags passed to an older CLI do not break setup. Unknown commands, missing values, invalid values, and duplicate flags are still errors.
 
