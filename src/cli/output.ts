@@ -49,8 +49,10 @@ a project. Run "playgroundvibes skill install" to add the skill explicitly.
 
 skill install --claude uses .claude/skills/playground-upload unless --path is set.
 In a terminal, it asks whether to enable commands for the current project [y/N].
-Accepting ensures the same package version is installed globally, then merges
-Bash(playgroundvibes:*) into the project's .claude/settings.local.json.
+Accepting ensures the same package version is installed globally, then allows
+read-only commands (whoami, --version, --help, skill path) in the project's
+.claude/settings.local.json and adds Bash(playgroundvibes deploy:*) to ask, so
+every deploy needs your approval. An older Bash(playgroundvibes:*) rule is removed.
 Declining or running without a terminal installs only the skill.
 With --claude, --allow-claude-commands enables setup without prompting.
 Setup uses the invoking npm/pnpm automatically; --package-manager npm|pnpm
@@ -58,9 +60,10 @@ overrides that choice and requires --claude or --codex.
 
 skill install --codex uses .agents/skills/playground-upload (where Codex reads
 project skills) unless --path is set, and asks the same [y/N] question. Accepting
-ensures the global CLI, then writes .codex/rules/playgroundvibes.rules with
-prefix_rule(pattern = ["playgroundvibes"], decision = "allow"). An existing
-different rules file is preserved and reported. Codex loads project rules only
+ensures the global CLI, then writes .codex/rules/playgroundvibes.rules allowing
+the same read-only commands, with decision = "prompt" for every deploy. A rules
+file written by 0.1.5 or earlier is replaced; any other existing rules file is
+preserved and reported. Codex loads project rules only
 for trusted projects. --allow-codex-commands enables setup without prompting.
 This permission setup does not grant publication consent.
 

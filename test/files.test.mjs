@@ -332,6 +332,27 @@ test('browser builds include opaque assets and still scan gitignored output for 
   );
 });
 
+test('tracked browser builds such as build_dir ".." keep .gitignore rules', async (t) => {
+  const root = await fixture(t);
+  await fs.writeFile(path.join(root, '.gitignore'), 'config.local.js\npublic/secret.local.js\n');
+  await fs.writeFile(path.join(root, 'index.html'), '<h1>Static</h1>');
+  await fs.writeFile(path.join(root, 'app.js'), 'console.log(1);');
+  await fs.writeFile(path.join(root, 'config.local.js'), 'window.LOCAL = 1;');
+  const whole = await pack(root, { build: true, projectRoot: root });
+  const wholeFiles = Object.keys(unzipSync(Buffer.from(whole.data, 'base64')));
+  assert.ok(wholeFiles.includes('app.js'));
+  assert.equal(wholeFiles.includes('config.local.js'), false);
+  assert.ok(
+    whole.skipped.some((file) => file.path === 'config.local.js' && file.source === 'gitignore'),
+  );
+
+  await fs.mkdir(path.join(root, 'public'));
+  await fs.writeFile(path.join(root, 'public/index.html'), '<h1>Public</h1>');
+  await fs.writeFile(path.join(root, 'public/secret.local.js'), 'window.LOCAL = 2;');
+  const nested = await pack(path.join(root, 'public'), { build: true, projectRoot: root });
+  assert.deepEqual(Object.keys(unzipSync(Buffer.from(nested.data, 'base64'))), ['index.html']);
+});
+
 test('symlinks cannot escape the project or select an artifact root', async (t) => {
   const root = await fixture(t);
   await fs.writeFile(path.join(root, 'main.ts'), 'export {};');

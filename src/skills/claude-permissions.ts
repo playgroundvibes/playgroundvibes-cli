@@ -4,12 +4,33 @@ import { link, lstat, open, rename, rm } from 'node:fs/promises';
 import path from 'node:path';
 import { ensureDirectory, errorCode } from './filesystem.js';
 
-export const CLAUDE_COMMAND_PERMISSION = 'Bash(playgroundvibes:*)';
+/** Read-only commands Claude may run without asking. */
+export const CLAUDE_ALLOW_PERMISSIONS: readonly string[] = Object.freeze([
+  'Bash(playgroundvibes whoami:*)',
+  'Bash(playgroundvibes --version)',
+  'Bash(playgroundvibes --help)',
+  'Bash(playgroundvibes skill path:*)',
+]);
+
+/**
+ * Deploys always ask, so an agent cannot approve its own publication with the
+ * printed `deploy --consent DIGEST` command. Ask rules take precedence over allow rules.
+ */
+export const CLAUDE_ASK_PERMISSIONS: readonly string[] = Object.freeze([
+  'Bash(playgroundvibes deploy:*)',
+]);
+
+/** The broad rule written by 0.1.5 and earlier; it also allowed consented deploys. */
+export const LEGACY_CLAUDE_COMMAND_PERMISSION = 'Bash(playgroundvibes:*)';
 
 export interface ClaudePermissionResult {
   readonly path: string;
+  /** True when settings were changed. */
   readonly added: boolean;
-  readonly rule: string;
+  readonly allow: readonly string[];
+  readonly ask: readonly string[];
+  /** Legacy rules removed from permissions.allow. */
+  readonly removed: readonly string[];
 }
 
 export interface ClaudePermissionPlan {
@@ -167,17 +188,34 @@ export async function prepareClaudeCommandPermission(cwd: string): Promise<Claud
   const original = await readSettings(filename);
   const permissions = (original.settings.permissions ?? {}) as Settings;
   const allow = (permissions.allow ?? []) as string[];
-  const alreadyAllowed = allow.includes(CLAUDE_COMMAND_PERMISSION);
+  const ask = (permissions.ask ?? []) as string[];
+  const removed = allow.includes(LEGACY_CLAUDE_COMMAND_PERMISSION)
+    ? [LEGACY_CLAUDE_COMMAND_PERMISSION]
+    : [];
+  const keptAllow = allow.filter((rule) => rule !== LEGACY_CLAUDE_COMMAND_PERMISSION);
+  const nextAllow = [
+    ...keptAllow,
+    ...CLAUDE_ALLOW_PERMISSIONS.filter((rule) => !allow.includes(rule)),
+  ];
+  const nextAsk = [...ask, ...CLAUDE_ASK_PERMISSIONS.filter((rule) => !ask.includes(rule))];
+  const changed =
+    removed.length > 0 || nextAllow.length !== allow.length || nextAsk.length !== ask.length;
   return {
     async apply(): Promise<ClaudePermissionResult> {
       await assertUnchanged(filename, original);
-      if (!alreadyAllowed) {
+      if (changed) {
         await writeSettings(filename, original, {
           ...original.settings,
-          permissions: { ...permissions, allow: [...allow, CLAUDE_COMMAND_PERMISSION] },
+          permissions: { ...permissions, allow: nextAllow, ask: nextAsk },
         });
       }
-      return { path: filename, added: !alreadyAllowed, rule: CLAUDE_COMMAND_PERMISSION };
+      return {
+        path: filename,
+        added: changed,
+        allow: CLAUDE_ALLOW_PERMISSIONS,
+        ask: CLAUDE_ASK_PERMISSIONS,
+        removed,
+      };
     },
   };
 }

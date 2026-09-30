@@ -131,10 +131,31 @@ export async function collectFiles(
     'playgroundignore',
   );
 
+  /**
+   * Browser output is normally gitignored (dist/, build/, out/), so an ignored
+   * build directory bypasses .gitignore. A build directory Git tracks, such as
+   * build_dir: ".." for a static site, keeps the same .gitignore rules as source.
+   */
+  async function buildGitRules(): Promise<IgnoreScope[] | undefined> {
+    const rules: IgnoreScope[] = [];
+    const components = path.relative(projectRoot, root).split(path.sep).filter(Boolean);
+    let directory = projectRoot;
+    for (const component of components) {
+      const local = await readIgnoreFile(path.join(directory, '.gitignore'), 'gitignore');
+      if (local) rules.push(local);
+      directory = path.join(directory, component);
+      if (matchIgnoreFiles(directory, true, rules)) return undefined;
+    }
+    return rules;
+  }
+
+  const initialGitRules = build ? await buildGitRules() : [];
+  const useGitignore = initialGitRules !== undefined;
+
   async function walk(directory: string, inheritedGitRules: IgnoreScope[]): Promise<void> {
     await resolveProjectPath(projectRoot, directory);
     const gitRules = [...inheritedGitRules];
-    if (!build) {
+    if (useGitignore) {
       const localRules = await readIgnoreFile(path.join(directory, '.gitignore'), 'gitignore');
       if (localRules) gitRules.push(localRules);
     }
@@ -194,7 +215,7 @@ export async function collectFiles(
     }
   }
 
-  await walk(root, []);
+  await walk(root, initialGitRules ?? []);
   if (!files.length) throw new Error('No eligible files to upload.');
   if (build && !files.some((file) => file.path === 'index.html')) {
     throw new Error('The browser build must contain index.html at its root.');

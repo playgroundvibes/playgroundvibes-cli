@@ -15,7 +15,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
 import {
-  CLAUDE_COMMAND_PERMISSION,
+  CLAUDE_ALLOW_PERMISSIONS,
+  CLAUDE_ASK_PERMISSIONS,
+  LEGACY_CLAUDE_COMMAND_PERMISSION,
   prepareClaudeCommandPermission,
 } from '../dist/skills/claude-permissions.js';
 
@@ -38,14 +40,15 @@ test('preparing is read-only and applying creates only the requested Claude comm
   await assert.rejects(access(path.dirname(file)), { code: 'ENOENT' });
   // The skill installer creates .claude after preparation and before applying permissions.
   await mkdir(path.dirname(file));
-  assert.equal(CLAUDE_COMMAND_PERMISSION, 'Bash(playgroundvibes:*)');
   assert.deepEqual(await plan.apply(), {
     path: file,
     added: true,
-    rule: CLAUDE_COMMAND_PERMISSION,
+    allow: CLAUDE_ALLOW_PERMISSIONS,
+    ask: CLAUDE_ASK_PERMISSIONS,
+    removed: [],
   });
   assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), {
-    permissions: { allow: [CLAUDE_COMMAND_PERMISSION] },
+    permissions: { allow: CLAUDE_ALLOW_PERMISSIONS, ask: CLAUDE_ASK_PERMISSIONS },
   });
   assert.deepEqual(await readdir(path.dirname(file)), ['settings.local.json']);
   if (process.platform !== 'win32') assert.equal((await stat(file)).mode & 0o777, 0o600);
@@ -70,20 +73,51 @@ test('merge preserves other settings and allow, ask, and deny rules', async (t) 
     ...existing,
     permissions: {
       ...existing.permissions,
-      allow: [...existing.permissions.allow, CLAUDE_COMMAND_PERMISSION],
+      allow: [...existing.permissions.allow, ...CLAUDE_ALLOW_PERMISSIONS],
     },
   });
 });
 
-test('an existing exact permission is not duplicated or rewritten', async (t) => {
-  const contents =
-    '{\r\n\t"permissions" : {"allow":["Bash(playgroundvibes:*)"], "deny": ["Bash(rm:*)"]}\r\n}\r\n';
+test('only read-only commands are allowed and every deploy asks, so consent cannot be self-approved', () => {
+  assert.deepEqual(CLAUDE_ALLOW_PERMISSIONS, [
+    'Bash(playgroundvibes whoami:*)',
+    'Bash(playgroundvibes --version)',
+    'Bash(playgroundvibes --help)',
+    'Bash(playgroundvibes skill path:*)',
+  ]);
+  assert.deepEqual(CLAUDE_ASK_PERMISSIONS, ['Bash(playgroundvibes deploy:*)']);
+  for (const rule of CLAUDE_ALLOW_PERMISSIONS) {
+    assert.doesNotMatch(rule, /deploy|connect|login|logout|install|playgroundvibes:\*/);
+  }
+});
+
+test('the legacy broad permission is removed while other rules are preserved', async (t) => {
+  const { root, file } = await settingsFixture(
+    t,
+    JSON.stringify({ permissions: { allow: ['Read', LEGACY_CLAUDE_COMMAND_PERMISSION] } }),
+  );
+  assert.deepEqual(await (await prepareClaudeCommandPermission(root)).apply(), {
+    path: file,
+    added: true,
+    allow: CLAUDE_ALLOW_PERMISSIONS,
+    ask: CLAUDE_ASK_PERMISSIONS,
+    removed: [LEGACY_CLAUDE_COMMAND_PERMISSION],
+  });
+  assert.deepEqual(JSON.parse(await readFile(file, 'utf8')), {
+    permissions: { allow: ['Read', ...CLAUDE_ALLOW_PERMISSIONS], ask: CLAUDE_ASK_PERMISSIONS },
+  });
+});
+
+test('existing exact permissions are not duplicated or rewritten', async (t) => {
+  const contents = `{\r\n\t"permissions" : {"allow":${JSON.stringify(CLAUDE_ALLOW_PERMISSIONS)}, "ask": ${JSON.stringify(CLAUDE_ASK_PERMISSIONS)}, "deny": ["Bash(rm:*)"]}\r\n}\r\n`;
   const { root, file } = await settingsFixture(t, contents);
   const before = await stat(file);
   assert.deepEqual(await (await prepareClaudeCommandPermission(root)).apply(), {
     path: file,
     added: false,
-    rule: CLAUDE_COMMAND_PERMISSION,
+    allow: CLAUDE_ALLOW_PERMISSIONS,
+    ask: CLAUDE_ASK_PERMISSIONS,
+    removed: [],
   });
   assert.equal(await readFile(file, 'utf8'), contents);
   const after = await stat(file);

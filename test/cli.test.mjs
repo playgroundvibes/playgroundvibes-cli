@@ -202,6 +202,17 @@ ${tty ? "Object.defineProperty(process.stdin, 'isTTY', { value: true }); Object.
   };
 }
 
+const claudeRules = {
+  allow: [
+    'Bash(playgroundvibes whoami:*)',
+    'Bash(playgroundvibes --version)',
+    'Bash(playgroundvibes --help)',
+    'Bash(playgroundvibes skill path:*)',
+  ],
+  ask: ['Bash(playgroundvibes deploy:*)'],
+  removed: [],
+};
+
 test('help and package version are local and explain publication consent', async () => {
   for (const args of [[], ['--help'], ['-h'], ['deploy', '--help']]) {
     const result = invoke(args);
@@ -217,7 +228,8 @@ test('help and package version are local and explain publication consent', async
     assert.match(result.stdout, /same package version is installed\s+globally/);
     assert.match(result.stdout, /current project \[y\/N\]/);
     assert.match(result.stdout, /requires --claude/);
-    assert.ok(result.stdout.includes('Bash(playgroundvibes:*)'));
+    assert.ok(result.stdout.includes('Bash(playgroundvibes deploy:*)'));
+    assert.match(result.stdout, /decision = "prompt" for every deploy/);
     assert.match(result.stdout, /does not grant\s+publication consent/);
     assert.doesNotMatch(result.stdout, /Python/);
   }
@@ -366,7 +378,13 @@ test('skill install redeems a pairing code before installing so the CLI starts c
 
 test('Codex skill installation uses .agents and adds project rules only when allowed', async (t) => {
   const rulesRelative = '.codex/rules/playgroundvibes.rules';
-  const rule = 'prefix_rule(pattern = ["playgroundvibes"], decision = "allow")';
+  const rules = [
+    'prefix_rule(pattern = ["playgroundvibes", "whoami"], decision = "allow")',
+    'prefix_rule(pattern = ["playgroundvibes", "--version"], decision = "allow")',
+    'prefix_rule(pattern = ["playgroundvibes", "--help"], decision = "allow")',
+    'prefix_rule(pattern = ["playgroundvibes", "skill", "path"], decision = "allow")',
+    'prefix_rule(pattern = ["playgroundvibes", "deploy"], decision = "prompt")',
+  ];
   {
     const globalCLI = await mockedGlobalCLI(t);
     const { directory, options } = globalCLI;
@@ -387,23 +405,46 @@ test('Codex skill installation uses .agents and adds project rules only when all
       input: 'y\n',
     });
     assert.equal(result.status, 0, result.stderr);
-    assert.match(result.stderr, /Allow Codex to run playgroundvibes commands/);
+    assert.match(result.stderr, /Allow Codex to run read-only playgroundvibes commands/);
     const rulesPath = path.join(directory, rulesRelative);
     assert.deepEqual(events(result), [
       {
         path: path.join(directory, '.agents/skills/playground-upload'),
         installed: true,
         globalCLI: { ...globalCLI.result, packageManager: 'pnpm' },
-        codexPermissions: { path: rulesPath, added: true, rule },
+        codexPermissions: { path: rulesPath, added: true, replaced: false, rules },
       },
     ]);
     const contents = await readFile(rulesPath, 'utf8');
-    assert.match(contents, /pattern = \["playgroundvibes"\]/);
-    assert.match(contents, /decision = "allow"/);
+    for (const rule of rules) assert.ok(contents.includes(rule), rule);
+    assert.doesNotMatch(contents, /pattern = \["playgroundvibes"\]/);
 
     const again = invoke(['skill', 'install', '--codex', '--allow-codex-commands'], options);
     assert.equal(again.status, 0, again.stderr);
     assert.equal(events(again)[0].codexPermissions.added, false);
+    assert.equal(await readFile(rulesPath, 'utf8'), contents);
+
+    await writeFile(
+      rulesPath,
+      [
+        '# Added by @playgroundvibes/cli skill install --codex.',
+        '# Lets Codex run the global playgroundvibes command. Publishing still requires review and consent.',
+        'prefix_rule(',
+        '    pattern = ["playgroundvibes"],',
+        '    decision = "allow",',
+        '    justification = "Playground Vibes CLI; uploads still require an approved review digest",',
+        ')',
+        '',
+      ].join('\n'),
+    );
+    const legacy = invoke(['skill', 'install', '--codex', '--allow-codex-commands'], options);
+    assert.equal(legacy.status, 0, legacy.stderr);
+    assert.deepEqual(events(legacy)[0].codexPermissions, {
+      path: rulesPath,
+      added: true,
+      replaced: true,
+      rules,
+    });
     assert.equal(await readFile(rulesPath, 'utf8'), contents);
 
     await writeFile(rulesPath, 'prefix_rule(pattern = ["git"], decision = "prompt")\n');
@@ -485,21 +526,22 @@ test('interactive Claude installation accepts only yes or y and keeps its permis
     const result = invoke(args, { ...options, input });
     assert.equal(result.status, 0, result.stderr);
     const settingsPath = path.join(directory, '.claude/settings.local.json');
-    const rule = 'Bash(playgroundvibes:*)';
     assert.deepEqual(events(result), [
       {
         path: path.join(directory, '.claude/skills/playground-upload'),
         installed: true,
         globalCLI: { ...globalCLI.result, packageManager: packageManager ?? 'npm' },
-        claudePermissions: { path: settingsPath, added: true, rule },
+        claudePermissions: { path: settingsPath, added: true, ...claudeRules },
       },
     ]);
     assert.ok(result.stderr.includes(JSON.stringify(directory)));
-    assert.ok(result.stderr.includes(rule));
+    assert.match(result.stderr, /read-only playgroundvibes commands/);
+    assert.match(result.stderr, /every deploy ask/);
     assert.match(result.stderr, /global/i);
     assert.match(result.stderr, /publish.*consent/i);
     assert.equal(result.stderr.match(/\[y\/N\]/gi)?.length, 1);
-    assert.deepEqual(JSON.parse(await readFile(settingsPath, 'utf8')).permissions.allow, [rule]);
+    const { permissions } = JSON.parse(await readFile(settingsPath, 'utf8'));
+    assert.deepEqual(permissions, { allow: claudeRules.allow, ask: claudeRules.ask });
     assert.deepEqual(await globalCLI.calls(), [{ packageManager: packageManager ?? null }]);
   }
 });
@@ -569,7 +611,6 @@ test('Claude permissions require both input and stderr terminals and ignore pipe
 });
 
 test('explicit Claude setup forwards package managers and adds project-local permissions idempotently', async (t) => {
-  const rule = 'Bash(playgroundvibes:*)';
   for (const { customPath, packageManager, tty } of [
     {},
     { customPath: 'custom-skill', packageManager: 'pnpm', tty: true },
@@ -592,12 +633,12 @@ test('explicit Claude setup forwards package managers and adds project-local per
       {
         path: skillPath,
         installed: true,
-        claudePermissions: { path: settingsPath, added: true, rule },
+        claudePermissions: { path: settingsPath, added: true, ...claudeRules },
         globalCLI: globalResult,
       },
     ]);
     const settings = JSON.parse(await readFile(settingsPath, 'utf8'));
-    assert.deepEqual(settings.permissions.allow, [rule]);
+    assert.deepEqual(settings.permissions, { allow: claudeRules.allow, ask: claudeRules.ask });
     await access(path.join(skillPath, 'SKILL.md'));
 
     const again = invoke(args, options);
@@ -607,7 +648,7 @@ test('explicit Claude setup forwards package managers and adds project-local per
       {
         path: skillPath,
         installed: false,
-        claudePermissions: { path: settingsPath, added: false, rule },
+        claudePermissions: { path: settingsPath, added: false, ...claudeRules },
         globalCLI: globalResult,
       },
     ]);

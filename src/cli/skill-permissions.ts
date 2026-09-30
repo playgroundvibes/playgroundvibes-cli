@@ -1,18 +1,21 @@
 import path from 'node:path';
 import { createInterface } from 'node:readline';
-import { CLAUDE_COMMAND_PERMISSION } from '../skills/claude-permissions.js';
-import { CODEX_COMMAND_RULE, CODEX_RULES_FILE } from '../skills/codex-permissions.js';
+import { CODEX_RULES_FILE } from '../skills/codex-permissions.js';
 
 export type SkillAgent = 'claude' | 'codex';
 
 const AGENTS = {
   claude: {
     title: 'Claude',
-    change: `merges ${CLAUDE_COMMAND_PERMISSION} into .claude/settings.local.json.`,
+    change:
+      'allows read-only playgroundvibes commands (whoami, --version, --help, skill path)\n' +
+      'in .claude/settings.local.json and makes every deploy ask for approval.',
   },
   codex: {
     title: 'Codex',
-    change: `adds ${CODEX_COMMAND_RULE} in ${CODEX_RULES_FILE}.`,
+    change:
+      `allows read-only playgroundvibes commands (whoami, --version, --help, skill path)\n` +
+      `in ${CODEX_RULES_FILE} and makes every deploy prompt for approval.`,
   },
 } as const;
 
@@ -50,7 +53,7 @@ export async function confirmAgentCommands(agent: SkillAgent): Promise<boolean> 
         'This installs the matching @playgroundvibes/cli version globally if needed',
         `and ${change}`,
         'Existing settings are preserved. Publishing still requires your consent.',
-        `Allow ${title} to run playgroundvibes commands for this project? [y/N] `,
+        `Allow ${title} to run read-only playgroundvibes commands for this project? [y/N] `,
       ].join('\n'),
     );
   });

@@ -136,7 +136,7 @@ For an agent or other noninteractive caller:
 
 Filtering follows the owner's original Node bundle. Every regular file format and extension is accepted, including binary assets, archives, databases, executables, and source maps, subject to the original path exclusions and size limits. Selected bytes are preserved exactly.
 
-- Source honors nested `.gitignore`; the root `.playgroundignore` applies to source and build. Selected browser output bypasses `.gitignore`.
+- Source honors nested `.gitignore`; the root `.playgroundignore` applies to source and build. Selected browser output bypasses `.gitignore` when the output directory itself is gitignored (as `dist/` usually is); a tracked build directory, such as `build_dir: ".."`, keeps the source `.gitignore` rules.
 - The original mandatory exclusions cover `.env` variants, selected private settings, dependency/cache directories, private-key/log filenames, and common chat/user exports. Unsafe paths, symlinks, and nonregular entries are skipped and reported. See the [complete exclusion table](docs/filtering.md#built-in-exclusions).
 - Each selected file is checked using `Buffer.toString('utf8')` and only the original literal patterns for private-key markers and OpenAI/Anthropic, Playground, GitHub, AWS, and Slack credentials. Final metadata receives the same literal checks.
 - There is no Secretlint ruleset, generic password/credential-assignment or URL check, encoding decoder, UTF-16 extraction, archive inspection, or format validation. A matching literal credential or exceeded upload limit blocks preparation; files are never redacted or rewritten.
@@ -224,17 +224,23 @@ npx @playgroundvibes/cli@latest skill install --claude --allow-claude-commands
 
 When accepted, the installer checks the selected package manager's global installation records. It reuses a matching version or installs the exact CLI version running the setup command from the public npm registry. It verifies the global package, executable, and PATH before adding permissions; an npx cache copy does not count as a global installation. Installation uses npm by default or pnpm when invoked through pnpm. With `--claude`, `--package-manager npm` or `--package-manager pnpm` overrides that choice; it is used only if command permission is accepted.
 
-Once the dependency is ready, setup merges the following rule into `.claude/settings.local.json` in the current project:
+Once the dependency is ready, setup merges the following rules into `.claude/settings.local.json` in the current project:
 
 ```json
 {
   "permissions": {
-    "allow": ["Bash(playgroundvibes:*)"]
+    "allow": [
+      "Bash(playgroundvibes whoami:*)",
+      "Bash(playgroundvibes --version)",
+      "Bash(playgroundvibes --help)",
+      "Bash(playgroundvibes skill path:*)"
+    ],
+    "ask": ["Bash(playgroundvibes deploy:*)"]
   }
 }
 ```
 
-Existing settings, including other allow, ask, and deny rules, are preserved. Repeating the command does not add a duplicate. Global installation and permission changes require an affirmative prompt answer or `--allow-claude-commands`. An edited existing skill is preserved; installation reports the conflict instead of overwriting it or granting new permissions. If dependency installation or verification fails, permissions are left unchanged.
+Only read-only commands run without asking. Every `deploy`, including `--dry-run` and `--consent DIGEST`, asks for your approval, so an agent cannot approve its own publication with the command the CLI prints. Existing settings, including other allow, ask, and deny rules, are preserved. Repeating the command does not add duplicates. The broad `Bash(playgroundvibes:*)` rule written by 0.1.5 and earlier is removed. Global installation and permission changes require an affirmative prompt answer or `--allow-claude-commands`. An edited existing skill is preserved; installation reports the conflict instead of overwriting it or granting new permissions. If dependency installation or verification fails, permissions are left unchanged.
 
 After setup, use `playgroundvibes` directly: the rule does not match `npx` or `pnpm dlx` invocations. The initial setup still requires normal host approval or running the command yourself in a terminal. If pnpm reports that its global bin directory is not on PATH, run `pnpm setup`, reopen the terminal, and retry; the installer does not edit shell profiles or use sudo. Claude's deny rules and other host policies remain effective. See [Claude's permission rules](https://code.claude.com/docs/en/permissions).
 
@@ -247,14 +253,14 @@ npx @playgroundvibes/cli@latest skill install --codex
 It asks the same question (default **No**); `--allow-codex-commands` skips the prompt for scripted setup. When accepted, it ensures the global CLI exactly as for Claude and then writes `.codex/rules/playgroundvibes.rules`:
 
 ```python
-prefix_rule(
-    pattern = ["playgroundvibes"],
-    decision = "allow",
-    justification = "Playground Vibes CLI; uploads still require an approved review digest",
-)
+prefix_rule(pattern = ["playgroundvibes", "whoami"], decision = "allow")
+prefix_rule(pattern = ["playgroundvibes", "--version"], decision = "allow")
+prefix_rule(pattern = ["playgroundvibes", "--help"], decision = "allow")
+prefix_rule(pattern = ["playgroundvibes", "skill", "path"], decision = "allow")
+prefix_rule(pattern = ["playgroundvibes", "deploy"], decision = "prompt")
 ```
 
-An existing, different rules file at that path is preserved and reported as a conflict. Codex loads project `.codex/` rules only for trusted projects. See [Codex rules](https://developers.openai.com/codex/rules). `--claude` and `--codex` cannot be combined in one run; run the installer once for each agent.
+Every deploy prompts for approval. A rules file written by 0.1.5 or earlier (which allowed every `playgroundvibes` command) is replaced; any other existing rules file at that path is preserved and reported as a conflict. Codex loads project `.codex/` rules only for trusted projects. See [Codex rules](https://developers.openai.com/codex/rules). `--claude` and `--codex` cannot be combined in one run; run the installer once for each agent.
 
 To sign the CLI in during setup, pass the pairing code generated on Playground:
 

@@ -24,7 +24,7 @@ Project/manifest loading lives in `src/project/load-project.ts`; browser output 
 
 ## File selection
 
-Source collection applies nested `.gitignore` rules and the root `.playgroundignore`. Browser builds bypass `.gitignore` and apply the root `.playgroundignore`. An excluded directory is not traversed. Source collection also omits top-level `dist`, `build`, and `out`; selected browser output is collected separately.
+Source collection applies nested `.gitignore` rules and the root `.playgroundignore`. Browser builds apply the root `.playgroundignore`. A gitignored build directory (the usual `dist/`) bypasses `.gitignore`; a build directory Git tracks, such as `build_dir: ".."` for a static site, applies `.gitignore` exactly as source does, so gitignored local files are not uploaded. An excluded directory is not traversed. Source collection also omits top-level `dist`, `build`, and `out`; selected browser output is collected separately.
 
 Mandatory exclusions match artifact-relative paths: source paths start at the project root, while build paths start at the selected build directory. `.playgroundignore` patterns use project-relative paths, so `dist/private.json` applies to that file in a build rooted at `dist`. Only the project-root `.playgroundignore` supplies these rules. Ignore negations cannot restore mandatory exclusions.
 
