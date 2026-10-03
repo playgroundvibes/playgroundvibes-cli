@@ -31,8 +31,9 @@ bundle's path exclusions and size limits. Checks match only its literal credenti
 in each file's UTF-8 representation; encoded and compressed content is not inspected.
 PNG/JPEG/WebP cover_file images up to 3 MiB are supported. Explicit covers do not
 apply source/build exclusions or ignore rules. Review these selections carefully.
-Source limits are 50 MiB per file/total and 2,000 files; builds allow 3 MiB per file,
-10 MiB total, and 150 files. ZIPs are limited to 10 MiB and requests to 16 MiB.
+Projects allow 1 GiB and 500 files across source, browser build, and cover.
+Large archives upload in resumable 5 MiB parts. HTML documents must be under 8 MiB;
+keep large data and media in separate assets. Covers remain limited to 3 MiB.
 Review the complete included files, exclusions, destination, and account before
 publishing. Interactive deploy requires typing PUBLISH. Noninteractive deploy
 and --json require --consent with the exact account-bound review digest.
