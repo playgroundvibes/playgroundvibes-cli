@@ -41,7 +41,7 @@ Starting in 0.1.2, omitting `build_dir` detects a single browser output in `dist
 
 This package retains an explicit approval step and structured review/result events. Metadata is validated before transmission. Conflicting ownership choices, such as enabling remix with an all-rights-reserved license, require correction instead of relying on server normalization.
 
-Completed imports publish immediately. The owner documents private Git history and automatic improvements for supported browser apps; a subsequent local upload replaces those server changes. Source-download and remix permissions are separate. The uploader does not deploy backend processes or databases.
+Imports request publication after server checks pass. The receipt and deployment-status endpoint report publication separately from upload acceptance. The owner documents private Git history and automatic improvements for supported browser apps; a subsequent local upload replaces those server changes. Source-download and remix permissions are separate. The uploader does not deploy backend processes or databases.
 
 ## Verification boundary
 

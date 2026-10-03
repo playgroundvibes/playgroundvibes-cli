@@ -4,8 +4,14 @@ import { createAuth } from './auth/connection.js';
 import type { ConnectResult, ConnectionInfo, LogoutResult } from './auth/types.js';
 import { ConsentError } from './publishing/consent.js';
 import { prepareUpload, type PreparedUpload } from './publishing/prepare.js';
-import type { DeploymentConsent, DeploymentResult, Review } from './publishing/types.js';
-import { uploadPreparedProject } from './publishing/upload.js';
+import type {
+  DeploymentConsent,
+  DeploymentResult,
+  DeploymentStatus,
+  Review,
+} from './publishing/types.js';
+import { uploadPreparedProject, readDeploymentStatus } from './publishing/upload.js';
+import { readProjectIdentity } from './project/identity.js';
 
 export interface ClientOptions {
   readonly cwd?: string;
@@ -25,6 +31,8 @@ export interface PlaygroundClient {
   prepare(): Promise<Review>;
   /** Publish a review from this client after obtaining the user's explicit consent. */
   deploy(review: Review, approval: DeploymentConsent): Promise<DeploymentResult>;
+  /** Read processing/publication status without uploading or changing permissions. */
+  deploymentStatus(versionId?: string): Promise<DeploymentStatus>;
 }
 
 /** Coordinate authentication, inspection and consent without an unreviewed upload API. */
@@ -39,6 +47,31 @@ export function createPlaygroundClient(options: ClientOptions = {}): PlaygroundC
     connect: auth.connect,
     whoami: auth.whoami,
     logout: auth.logout,
+    async deploymentStatus(versionId?: string): Promise<DeploymentStatus> {
+      const identity = await readProjectIdentity(cwd);
+      if (!identity?.project_id)
+        throw new Error('This project has not been uploaded to Playground yet.');
+      const account = await auth.account();
+      if (
+        identity.account_id !== account.account_id ||
+        (account.project_id && account.project_id !== identity.project_id)
+      )
+        throw new Error('This project belongs to a different connected account or project.');
+      const result = readDeploymentStatus(
+        await sendRequest(
+          '/api/assistant/deployment-status',
+          {
+            project_id: identity.project_id,
+            ...(versionId ? { version_id: versionId } : {}),
+          },
+          account.token,
+        ),
+        identity.project_id,
+      );
+      if (versionId && result.version_id !== versionId)
+        throw new Error('The status response belongs to a different uploaded version.');
+      return result;
+    },
     async inspect(): Promise<Review> {
       return (await prepareUpload(cwd, auth.configDir)).review;
     },

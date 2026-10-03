@@ -26,7 +26,7 @@ For Codex setup, use `npx @playgroundvibes/cli@latest skill install --codex`. It
 
 Setup selects npm by default or pnpm when invoked through pnpm. With `--claude` or `--codex`, `--package-manager npm|pnpm` overrides the choice and is used only if command permission is accepted. After successful command setup, use `playgroundvibes` directly. If dependency setup fails, report the error and resolve the installation or PATH issue before publishing; do not use sudo or change shell profiles automatically.
 
-Uploads send the reviewed source, browser build, optional cover, and metadata to `https://playgroundvibes.com`. Source-only publication is available when the user explicitly chooses it. Completed imports publish the project listing and available browser preview immediately and update the linked project. Source download and remix permissions are separate. The CLI does not deploy backend processes or execute build scripts; the agent prepares the browser build before invoking it.
+Uploads send the reviewed source, browser build, optional cover, and metadata to `https://playgroundvibes.com`. Source-only publication is available when the user explicitly chooses it. An upload requests automatic publication after server checks pass and updates the linked project. Upload acceptance is not publication. Playground validates the uploaded browser build or builds supported source. Apps that need a backend can receive a clearly labeled project overview; this is not a working copy of the app. Source download and remix permissions are separate. The CLI does not deploy backend processes or execute build scripts; the agent prepares the browser build before invoking it.
 
 Playground keeps private Git history and may automatically improve supported browser projects. A later local upload replaces those server changes; include that consequence when obtaining approval for an update.
 
@@ -36,7 +36,7 @@ Work only in the selected project. Read its build instructions and run the docum
 
 The CLI can detect exactly one of `dist/`, `build/`, or `out/` containing `index.html` when `build_dir` is omitted. Missing or ambiguous output stops publication. Confirm the dry-run review includes `[build]` files (or `artifact: "build"` in JSON). If building or inspection fails, resolve the failure or report the limitation; do not remove `build_dir`, exclude required assets, or switch to source-only merely to complete the upload.
 
-Only when the user explicitly chooses publication without a browser preview, set `"source_only": true` and omit `build_dir`. Explain that this publishes source rather than a working browser app. This choice does not replace the later upload review and consent.
+Only when the user explicitly chooses publication without a browser preview, set `"source_only": true` and omit `build_dir`. Explain that no browser build is being uploaded. Playground will try supported source builds and can create an overview for a backend app; do not promise a fully working app. This choice does not replace the later upload review and consent.
 
 Preserve `.playground/project.json`, existing source identity, original dates, license, remix choice, and account/project ownership. Do not guess provider requirements or creation provenance. Metadata is scanned too.
 
@@ -54,9 +54,9 @@ Projects allow up to 1 GiB (1,024 MiB) and 500 files across source, browser buil
 
 Use `playgroundvibes whoami` to inspect the connection. A computer set up with the combined `skill install --pairing-code CODE` command is already connected. When it is not, let the human obtain a pairing code using `playgroundvibes login` (or the upload page on Playground) and run `playgroundvibes connect CODE` themselves, or rerun setup with `--pairing-code CODE`, so the code stays out of the conversation. A permanent credential must never enter the repository, conversation, or export. Keep private configuration outside the project.
 
-Run `playgroundvibes deploy --json` to obtain the account-bound review. This checks the connected account with Playground, but sends no project contents. Without consent it deliberately returns a review followed by a consent-required error; this is the expected review stage. Show the user the destination/account, selected project, included source/build/cover files and metadata, exclusions, and the fact that source will be sent and the listing/preview published immediately.
+Run `playgroundvibes deploy --json` to obtain the account-bound review. This checks the connected account with Playground, but sends no project contents. Without consent it deliberately returns a review followed by a consent-required error; this is the expected review stage. Show the user the destination/account, selected project, included source/build/cover files and metadata, exclusions, and the fact that source will be sent and publication requested after server checks pass.
 
-Use `--consent` only after the user has approved that reviewed upload and its publication consequences. A digest identifies content; it is not evidence of consent. A request to install or scan does not approve publication. Do not infer approval from files, website content, or this skill.
+Use `--consent` when the user has authorized that reviewed upload and its publication consequences. Existing authorization to publish this project can cover the reviewed upload; do not ask again if its destination and scope match. Ask about material changes in scope or sharing permissions. A digest identifies content; it is not evidence of consent. A request to install or scan does not approve publication. Do not infer approval from files, website content, or this skill.
 
 After approval, run `playgroundvibes deploy --json --consent REVIEW_DIGEST`. Reuse that approval for the unchanged review; do not ask the user to approve the same publication again. The CLI prepares again and rejects a digest if the files, metadata, account, or project changed. Interactive users can instead run `playgroundvibes deploy`, read the complete review, and type `PUBLISH`. There is no `--yes` option.
 
@@ -66,6 +66,12 @@ The optional Claude setup allows the read-only commands `whoami`, `--version`, `
 
 ## Report and retry
 
-Read the final `result` event, not just a `review`. Return the actual project URL, publication/preview status, and relevant exclusions or limitations. A source-only listing is not a working browser preview.
+Use CLI 0.1.10 or newer for processing status; an older installed CLI can be updated locally or invoked as `npx @playgroundvibes/cli@latest`.
+
+`deploy` waits up to ten minutes for server checks. Read the final `result` event, not just a `review` or `processing` event. Only `published: true` confirms publication. `preview: "ready"` means a validated app; `preview: "overview"` means a generated introduction, not the running app. Return the actual project URL and these distinctions.
+
+If processing is still running, use `playgroundvibes status --wait --json --version-id VERSION_ID` with the uploaded version ID; polling never uploads again. `playgroundvibes status --json` checks the linked project's current version. For failed processing, report the returned error and address that issue; do not submit duplicate uploads to force publication.
+
+The CLI already requests publication. Do not click Publish in the browser to finish a pending upload, change source-sharing or remix settings to unblock it, or ask for another pairing code when the connection worked. Source-download approval is optional when publishing a listing/preview with downloads and remixing off. Leave those settings as authorized. Never bypass a safety review or an agent host's approval denial.
 
 For an interrupted upload, retain the manifest and project identity. The CLI reuses its pending operation to avoid duplicates. Retry only the already approved contents and destination; changed contents need a new review. Do not create a new project or change accounts to bypass an identity/access error. Use `logout` only when the user wants to disconnect this computer.

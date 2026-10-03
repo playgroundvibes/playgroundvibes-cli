@@ -4,7 +4,7 @@ Publish a reviewed project to [Playground Vibes](https://playgroundvibes.com/). 
 
 Users can ask their coding agent to publish a project without learning Git, creating a repository, or using GitHub. The agent prepares the project and shows the publication review; the user connects their Playground account when needed, approves the reviewed upload, and receives the project URL. Existing account connections and project identities are reused for updates.
 
-The CLI uses the owner's pairing and upload protocol. It scans selected files locally, shows the complete upload review, and requires explicit consent before any project content is posted. Completed uploads publish the listing and browser preview immediately. Selected source is sent to Playground; source download and remix permissions remain separate.
+The CLI uses the owner's pairing and upload protocol. It scans selected files locally, shows the complete upload review, and requires explicit consent before any project content is posted. Uploads request automatic publication after server checks pass. The CLI waits for that result; uploading alone does not confirm publication. Selected source is sent to Playground; source download and remix permissions remain separate.
 
 The service keeps private Git history and can automatically improve supported browser projects. A later local deployment replaces those server changes. Backend processes and databases are not deployed by this CLI. See [server compatibility](docs/server-compatibility.md) for the verified request contract and deliberate client-side restrictions.
 
@@ -311,3 +311,9 @@ If trust setup returns `403`, first check `npm whoami --registry=https://registr
 Once setup and repository changes are live, release a new version with `npm version patch` (or an explicit prerelease version), then push the commit and its version tag. Each tag must match the package version exactly. Do not tag the already bootstrapped version for publication again.
 
 Tests are offline: scanners use synthetic secrets, and deployment requests are mocked. Live pairing and publication still require service validation. See [NOTICE.md](NOTICE.md) for source/dependency attribution.
+
+### Processing status
+
+`playgroundvibes deploy` waits up to ten minutes for server processing. `--no-wait` returns after the upload; use `playgroundvibes status --wait --json` to resume checking. Add `--version-id ID` to follow one exact upload. Status checks use the existing account and project connection and never send the source again.
+
+Only `published: true` confirms publication. `preview: "ready"` means a validated app; `preview: "overview"` is a generated introduction for an app requiring backend hosting, not a running copy. Failed processing includes an error and keeps the candidate private. Publishing a listing/preview does not require turning on source downloads or remixing, and it does not require a second browser Publish action.

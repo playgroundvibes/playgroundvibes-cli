@@ -10,6 +10,7 @@ export type {
   ArtifactKind,
   DeploymentConsent,
   DeploymentResult,
+  DeploymentStatus,
 } from './publishing/types.js';
 export type { ConnectResult, ConnectionInfo, LogoutResult } from './auth/types.js';
 export type { PlaygroundTransport, PlaygroundEndpoint } from './api/transport.js';

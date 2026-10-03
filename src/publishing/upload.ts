@@ -11,7 +11,7 @@ import {
 import { readPrivateJSON, withLock, writeJSON } from '../storage/local-state.js';
 import { canonicalJSON, ConsentError, sha256 } from './consent.js';
 import type { PreparedUpload } from './prepare.js';
-import type { DeploymentResult, Review } from './types.js';
+import type { DeploymentResult, DeploymentStatus, Review } from './types.js';
 import { buildUploadRequests } from './upload-requests.js';
 import { multipartRequest } from './multipart.js';
 
@@ -65,8 +65,9 @@ async function sendWithRetry(
   }
 }
 
-function deploymentResult(value: JsonObject, review: Review): DeploymentResult {
-  const { status, id, version_id, url, preview, processing } = value;
+export function readDeploymentStatus(value: JsonObject, projectId?: string): DeploymentStatus {
+  const { status, id, version_id, url, preview, processing, published, publication, message } =
+    value;
   if (
     (status !== 'imported' && status !== 'existing') ||
     typeof id !== 'string' ||
@@ -78,7 +79,7 @@ function deploymentResult(value: JsonObject, review: Review): DeploymentResult {
   ) {
     throw new Error('Upload completion could not be verified. Retry the same reviewed project.');
   }
-  if (review.projectId && id !== review.projectId) {
+  if (projectId && id !== projectId) {
     throw new Error(
       'The upload response does not match the reviewed project. The saved identity was preserved.',
     );
@@ -101,7 +102,29 @@ function deploymentResult(value: JsonObject, review: Review): DeploymentResult {
     version_id,
     url: ORIGIN + url,
     ...(typeof preview === 'string' ? { preview } : {}),
-    ...(processingStatus !== undefined ? { processing: { status: processingStatus } } : {}),
+    ...(typeof published === 'boolean' ? { published } : {}),
+    ...(typeof publication === 'string' ? { publication } : {}),
+    ...(typeof message === 'string' && message.length <= 1500 ? { message } : {}),
+    ...(processingStatus !== undefined
+      ? {
+          processing: {
+            status: processingStatus,
+            ...(processing &&
+            typeof processing === 'object' &&
+            'error' in processing &&
+            typeof processing.error === 'string' &&
+            processing.error.length <= 1000
+              ? { error: processing.error }
+              : {}),
+          },
+        }
+      : {}),
+  };
+}
+
+function deploymentResult(value: JsonObject, review: Review): DeploymentResult {
+  return {
+    ...readDeploymentStatus(value, review.projectId),
     digest: review.digest,
     files: review.files.length,
     bytes: review.bytes,

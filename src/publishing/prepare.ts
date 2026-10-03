@@ -10,7 +10,7 @@ import { canonicalJSON, freezeRecursively, sha256 } from './consent.js';
 import type { Review, ReviewFile } from './types.js';
 
 export const PUBLICATION_NOTICE =
-  'The selected source will be sent to Playground Vibes. A completed upload publishes the project listing and available browser preview immediately and updates the linked project. Playground keeps private Git history and may automatically improve supported browser projects; a later local upload replaces those server changes. Source downloads and remix permission are separate settings.';
+  'The selected source will be sent to Playground Vibes. The upload requests publication of the listing and browser preview after server checks pass and updates the linked project. Playground validates an uploaded browser build or builds supported source; apps needing a backend can receive a clearly labeled project overview. Playground keeps private Git history and may automatically improve supported browser projects; a later local upload replaces those server changes. Source downloads and remix permission are separate settings.';
 
 export interface ArtifactHashes {
   readonly source: string;

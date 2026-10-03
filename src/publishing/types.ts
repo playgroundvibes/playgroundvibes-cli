@@ -37,13 +37,19 @@ export interface DeploymentConsent {
   readonly consent: string;
 }
 
-export interface DeploymentResult {
+export interface DeploymentStatus {
   readonly status: 'imported' | 'existing';
   readonly id: string;
   readonly version_id: string;
   readonly url: string;
   readonly preview?: string;
-  readonly processing?: { readonly status: string };
+  readonly published?: boolean;
+  readonly publication?: string;
+  readonly message?: string;
+  readonly processing?: { readonly status: string; readonly error?: string };
+}
+
+export interface DeploymentResult extends DeploymentStatus {
   readonly digest: string;
   readonly files: number;
   readonly bytes: number;

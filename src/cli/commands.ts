@@ -6,6 +6,7 @@ import type { CLIArguments } from './arguments.js';
 import { requirePublicationConsent } from './consent.js';
 import { printHelp, printJson, printReview } from './output.js';
 import { confirmAgentCommands } from './skill-permissions.js';
+import { waitForDeployment } from './deployment-status.js';
 
 async function openBrowser(url: string): Promise<void> {
   let executable: string;
@@ -96,13 +97,34 @@ export async function executeCommand({ configDir, command }: CLIArguments): Prom
     case 'logout':
       printJson((await client.logout()) ?? { loggedOut: true });
       return;
+    case 'status': {
+      let result = await client.deploymentStatus(command.versionId);
+      if (command.wait)
+        result = await waitForDeployment(
+          result,
+          () => client.deploymentStatus(result.version_id),
+          (value) => printJson({ type: 'processing', ...value }),
+        );
+      printJson(command.json ? { type: 'result', result } : result);
+      if (result.publication === 'failed') process.exitCode = 1;
+      return;
+    }
     case 'deploy': {
       const review = command.dryRun ? await client.inspect() : await client.prepare();
       printReview(review, command.dryRun, command.json);
       if (command.dryRun) return;
       const consent = await requirePublicationConsent(review.digest, command);
-      const result = await client.deploy(review, { consent });
+      let result = await client.deploy(review, { consent });
+      if (!command.noWait && result.publication === 'processing') {
+        const completed = await waitForDeployment(
+          result,
+          () => client.deploymentStatus(result.version_id),
+          (value) => printJson({ type: 'processing', ...value }),
+        );
+        result = { ...result, ...completed };
+      }
       printJson(command.json ? { type: 'result', result } : result);
+      if (result.publication === 'failed') process.exitCode = 1;
       return;
     }
   }

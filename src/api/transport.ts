@@ -5,6 +5,7 @@ export type PlaygroundEndpoint =
   | '/api/assistant/status'
   | '/api/assistant/disconnect'
   | '/api/assistant/import'
+  | '/api/assistant/deployment-status'
   | '/api/assistant/artifact';
 /** Responses are untrusted and validated by each service module. */
 export type PlaygroundTransport = (
@@ -28,6 +29,7 @@ const ENDPOINTS = new Set([
   '/api/assistant/status',
   '/api/assistant/disconnect',
   '/api/assistant/import',
+  '/api/assistant/deployment-status',
   '/api/assistant/artifact',
 ]);
 export const MAX_REQUEST_BYTES = 16 * 1024 * 1024;

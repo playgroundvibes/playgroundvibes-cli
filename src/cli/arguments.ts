@@ -4,12 +4,14 @@ export interface DeployArguments {
   dryRun: boolean;
   json: boolean;
   consent?: string;
+  noWait?: boolean;
 }
 
 export type CLICommand =
   | { name: 'help' | 'version' | 'whoami' | 'logout' | 'skill-path' }
   | { name: 'login'; noBrowser: boolean }
   | { name: 'connect'; code: string }
+  | { name: 'status'; wait: boolean; json: boolean; versionId?: string }
   | {
       name: 'skill-install';
       directory?: string;
@@ -154,6 +156,7 @@ function parseDeploy(args: string[], warnings: string[]): DeployArguments {
   let dryRun = false;
   let json = false;
   let consent: string | undefined;
+  let noWait = false;
   for (let index = 0; index < args.length; index += 1) {
     const argument = args[index]!;
     if (argument === '--dry-run') {
@@ -167,11 +170,12 @@ function parseDeploy(args: string[], warnings: string[]): DeployArguments {
       const parsed = takeValue(args, index, '--consent');
       consent = parsed.value;
       index = parsed.index;
-    } else ignoreUnknown(argument, 'deploy', warnings);
+    } else if (argument === '--no-wait') noWait = true;
+    else ignoreUnknown(argument, 'deploy', warnings);
   }
   if (dryRun && consent !== undefined)
     throw new Error('--dry-run cannot be combined with --consent.');
-  return { name: 'deploy', dryRun, json, consent };
+  return { name: 'deploy', dryRun, json, consent, ...(noWait ? { noWait: true } : {}) };
 }
 
 /** Parse flags and positional arguments without reading files or starting I/O. */
@@ -227,6 +231,23 @@ export function parseArguments(args: string[]): CLIArguments {
     case 'deploy':
       command = parseDeploy(rest, warnings);
       break;
+    case 'status': {
+      let wait = false,
+        json = false,
+        versionId: string | undefined;
+      for (let index = 0; index < rest.length; index++) {
+        const argument = rest[index]!;
+        if (argument === '--wait') wait = true;
+        else if (argument === '--json') json = true;
+        else if (argument === '--version-id' || argument.startsWith('--version-id=')) {
+          const parsed = takeValue(rest, index, '--version-id');
+          versionId = parsed.value;
+          index = parsed.index;
+        } else ignoreUnknown(argument, 'status', warnings);
+      }
+      command = { name: 'status', wait, json, ...(versionId ? { versionId } : {}) };
+      break;
+    }
     default:
       throw new Error(`Unknown command: ${name ?? '(missing)'}. Run playgroundvibes --help.`);
   }

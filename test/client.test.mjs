@@ -38,7 +38,7 @@ async function fixture(t, manifest = {}) {
         status: 'connected',
         ...(control.scope !== undefined ? { project_id: control.scope } : {}),
       };
-    if (endpoint === '/api/assistant/import') {
+    if (endpoint === '/api/assistant/import' || endpoint === '/api/assistant/deployment-status') {
       if (control.fail) throw new Error('Simulated network interruption');
       return {
         status: 'imported',
@@ -421,4 +421,46 @@ test('a credential scope change after approval blocks import without changing lo
   await assert.rejects(f.client.deploy(review, { consent: review.digest }), /project/i);
   assert.equal(imports(f).length, 0);
   assert.deepEqual(JSON.parse(await fs.readFile(identityFile, 'utf8')), identity);
+});
+
+test('status keeps publication separate from upload and cannot change account or re-upload', async (t) => {
+  const f = await fixture(t);
+  await assert.rejects(f.client.deploymentStatus(), /not been uploaded/);
+  await f.client.connect('ABCD2345');
+  f.control.responseFields = {
+    published: false,
+    publication: 'processing',
+    preview: 'processing',
+    message: 'Checking uploaded files.',
+    processing: { status: 'queued' },
+  };
+  const review = await f.client.prepare();
+  const result = await f.client.deploy(review, { consent: review.digest });
+  assert.equal(result.published, false);
+  assert.equal(result.publication, 'processing');
+  f.control.responseFields = {
+    published: true,
+    publication: 'published',
+    preview: 'overview',
+    processing: { status: 'complete' },
+  };
+  const completed = await f.client.deploymentStatus(result.version_id);
+  assert.equal(completed.published, true);
+  assert.equal(completed.preview, 'overview');
+  assert.equal(imports(f).length, 1);
+  const statusCall = f.calls.find((c) => c.endpoint === '/api/assistant/deployment-status');
+  assert.deepEqual(statusCall.body, { project_id: result.id, version_id: result.version_id });
+  f.control.responseFields = {
+    published: false,
+    publication: 'failed',
+    processing: { status: 'failed', error: 'Build failed' },
+  };
+  assert.equal((await f.client.deploymentStatus()).processing.error, 'Build failed');
+  f.control.account = 'different-account';
+  const count = f.calls.filter((c) => c.endpoint === '/api/assistant/deployment-status').length;
+  await assert.rejects(f.client.deploymentStatus(), /account changed|different connected/);
+  assert.equal(
+    f.calls.filter((c) => c.endpoint === '/api/assistant/deployment-status').length,
+    count,
+  );
 });

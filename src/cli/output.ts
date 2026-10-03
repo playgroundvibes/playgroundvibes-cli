@@ -7,7 +7,9 @@ Commands:
   connect CODE            Save the account connection for this computer
   whoami                  Show the connected account
   logout                  Remove the saved account connection
-  deploy [--dry-run] [--json] [--consent SHA256]
+  status [--wait] [--json] [--version-id ID]
+                          Check this project's processing and publication
+  deploy [--dry-run] [--json] [--consent SHA256] [--no-wait]
                           Review this project's files and publish with consent
   skill path              Print the bundled agent skill directory
   skill install [--path DIR] [--claude|--codex]
@@ -40,7 +42,11 @@ and --json require --consent with the exact account-bound review digest.
 There is no --yes option. A changed project or account requires a fresh review.
 
 Deployment sends source, optional browser build files, and a selected cover to Playground Vibes.
-A completed import publishes the listing and available browser preview;
+An upload requests publication after server checks pass. Deploy waits up to ten
+minutes; --no-wait returns after upload. Use status --wait to resume checking.
+Upload acceptance is not publication. A failed check leaves this version private.
+Playground validates the uploaded browser build or builds supported source.
+Apps requiring a backend can receive a clearly labeled project overview.
 source download and remix permission are separate choices.
 Playground keeps private Git history and may improve supported browser projects.
 A later local upload replaces those server changes.
@@ -126,7 +132,7 @@ export function printReview(review: Review, dryRun: boolean, asJson: boolean): v
     ...(review.excluded.length ? review.excluded.map(formatExclusion) : ['  None']),
     '',
     'Source, browser build files, and any selected cover above will be sent to Playground Vibes.',
-    'A completed import publishes the listing and available browser preview.',
+    'The upload requests automatic publication after server checks pass.',
     'Source download and remix permission are separate choices.',
     `Publication: ${review.publication}`,
     ...review.warnings.map((warning) => `Warning: ${JSON.stringify(warning)}`),
