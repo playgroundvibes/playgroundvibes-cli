@@ -424,9 +424,9 @@ test('source files above the previous 4 MiB restriction are accepted under the b
   );
 });
 
-test('source and browser per-file limits remain 50 MiB and 3 MiB', async (t) => {
-  assert.equal(INSPECTION_LIMITS.sourceFileBytes, 50 * MIB);
-  assert.equal(INSPECTION_LIMITS.buildFileBytes, 3 * MIB);
+test('source and browser per-file limits allow 1 GiB and reject one extra byte', async (t) => {
+  assert.equal(INSPECTION_LIMITS.sourceFileBytes, 1024 * MIB);
+  assert.equal(INSPECTION_LIMITS.buildFileBytes, 1024 * MIB);
   for (const build of [false, true]) {
     const root = await fixture(t);
     const limit = build ? INSPECTION_LIMITS.buildFileBytes : INSPECTION_LIMITS.sourceFileBytes;

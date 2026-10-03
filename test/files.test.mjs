@@ -375,6 +375,16 @@ test('pack reads included files once and packages the inspected snapshot', async
     const handle = await originalOpen.call(this, file, ...args);
     return new Proxy(handle, {
       get(target, property) {
+        if (property === 'createReadStream')
+          return (...streamArgs) => {
+            reads.set(file, (reads.get(file) ?? 0) + 1);
+            const stream = target.createReadStream(...streamArgs);
+            return (async function* () {
+              for await (const chunk of stream) yield chunk;
+              if (file === path.join(root, 'main.ts'))
+                await fs.writeFile(file, 'changed after reading');
+            })();
+          };
         if (property === 'readFile')
           return async (...readArgs) => {
             const result = await target.readFile(...readArgs);

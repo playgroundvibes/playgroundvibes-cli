@@ -13,6 +13,7 @@ import { canonicalJSON, ConsentError, sha256 } from './consent.js';
 import type { PreparedUpload } from './prepare.js';
 import type { DeploymentResult, Review } from './types.js';
 import { buildUploadRequests } from './upload-requests.js';
+import { multipartRequest } from './multipart.js';
 
 async function verifyDestination(
   upload: PreparedUpload,
@@ -129,12 +130,14 @@ export function uploadPreparedProject(
       `deploy-${sha256(review.root + '\n' + account.account_id)}.json`,
     );
     const operationId = await operationIdForReview(pendingFile, review.digest);
-    const parts = buildUploadRequests(upload, operationId);
 
     // Persist before the first POST so a lost response is safely retryable.
     await writeProjectIdentity(review.root, binding);
     await writeJSON(pendingFile, { digest: review.digest, operation: operationId });
     upload.previousIdentity = canonicalJSON(binding);
+    const parts = upload.archives
+      ? [await multipartRequest(upload, operationId, request, account.token)]
+      : buildUploadRequests(upload, operationId);
     let response: JsonObject = {};
     for (const part of parts) response = await sendWithRetry(request, part, account.token);
     const result = deploymentResult(response, review);

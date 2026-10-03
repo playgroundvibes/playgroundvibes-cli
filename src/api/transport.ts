@@ -4,7 +4,8 @@ export type PlaygroundEndpoint =
   | '/api/assistant/pair-redeem'
   | '/api/assistant/status'
   | '/api/assistant/disconnect'
-  | '/api/assistant/import';
+  | '/api/assistant/import'
+  | '/api/assistant/artifact';
 /** Responses are untrusted and validated by each service module. */
 export type PlaygroundTransport = (
   endpoint: PlaygroundEndpoint,
@@ -27,6 +28,7 @@ const ENDPOINTS = new Set([
   '/api/assistant/status',
   '/api/assistant/disconnect',
   '/api/assistant/import',
+  '/api/assistant/artifact',
 ]);
 export const MAX_REQUEST_BYTES = 16 * 1024 * 1024;
 const MAX_RESPONSE_BYTES = 256 * 1024;

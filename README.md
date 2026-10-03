@@ -145,7 +145,7 @@ Credential checks match literal patterns in each file’s UTF-8 representation; 
 
 Optional `cover_file` selects a project-local PNG, JPEG, or WebP image up to 3 MiB, resolved relative to `.playground/`. As in the original bundle, explicit covers do not apply `.gitignore`, `.playgroundignore`, or the source/build filename exclusions. They require a regular file without symlinked paths and use the same direct UTF-8 credential checks. Covers appear separately in the review. The `tripo` provider setting uses that canonical spelling in `provider_requirements`.
 
-Source limits are 50 MiB per file, 50 MiB total, and 2,000 files. Browser builds allow 3 MiB per file, 10 MiB total, and 150 files. Each compressed ZIP is limited to 10 MiB, and each request to 16 MiB. Offline tests compare exclusions and accepted file bytes with fixtures of the original policy; they do not establish that every possible secret is detected or every uploaded format can be previewed.
+Projects allow up to 1 GiB (1,024 MiB) and 500 files across source, browser build, and cover. Large archives use resumable 5 MiB parts; individual JSON requests stay below 16 MiB. Covers remain limited to 3 MiB. HTML documents must be under 8 MiB; keep large data and media in separate assets. Offline tests compare exclusions and accepted file bytes with fixtures of the original policy; they do not establish that every possible secret is detected or every uploaded format can be previewed.
 
 ## JavaScript / TypeScript API
 

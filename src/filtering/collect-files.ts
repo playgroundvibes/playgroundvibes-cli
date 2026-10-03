@@ -1,6 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { constants } from 'node:fs';
+import { constants, readFileSync } from 'node:fs';
+import { snapshotPath } from '../artifacts/snapshots.js';
 import { createHash } from 'node:crypto';
 import { INSPECTION_LIMITS } from './limits.js';
 import { rejectInspection } from './findings.js';
@@ -30,6 +31,7 @@ export interface FileExclusion extends ExclusionMatch {
 export interface InspectedFile extends FileSummary {
   /** The exact bytes scanned; archive generation must use these without rereading. */
   contents: Buffer;
+  readonly snapshotPath?: string;
 }
 
 export interface CollectionOptions {
@@ -87,24 +89,44 @@ export async function collectFiles(
 
   const files: InspectedFile[] = [];
   const skipped: FileExclusion[] = [];
-  const inspected = new Map<string, Buffer>();
   const fileLimit = build ? INSPECTION_LIMITS.buildFileBytes : INSPECTION_LIMITS.sourceFileBytes;
   const totalLimit = build ? INSPECTION_LIMITS.buildTotalBytes : INSPECTION_LIMITS.sourceTotalBytes;
   const countLimit = build ? INSPECTION_LIMITS.buildFileCount : INSPECTION_LIMITS.sourceFileCount;
   let bytes = 0;
 
-  async function inspectFile(file: string): Promise<Buffer> {
-    const previous = inspected.get(file);
-    if (previous) return previous;
+  async function inspectFile(
+    file: string,
+  ): Promise<{ snapshot: string; size: number; hash: string }> {
     const displayPath = relativePath(projectRoot, file);
     await resolveProjectPath(projectRoot, file);
     if ((await fs.lstat(file)).size > fileLimit)
       rejectInspection(displayPath, 'inspection/file-size-limit');
-    const contents = await readRegularFile(file);
-    if (contents.length > fileLimit) rejectInspection(displayPath, 'inspection/file-size-limit');
-    await inspectFileContents(contents, displayPath);
-    inspected.set(file, contents);
-    return contents;
+    const input = await fs.open(file, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+    const snapshot = snapshotPath(),
+      output = await fs.open(snapshot, 'wx', 0o600);
+    const hash = createHash('sha256');
+    let size = 0,
+      tail = Buffer.alloc(0);
+    try {
+      if (!(await input.stat()).isFile()) throw new Error('Expected a regular file.');
+      for await (const part of input.createReadStream({
+        autoClose: false,
+        highWaterMark: 256 * 1024,
+      })) {
+        const chunk = part as Buffer;
+        size += chunk.length;
+        if (size > fileLimit) rejectInspection(displayPath, 'inspection/file-size-limit');
+        const scan = Buffer.concat([tail, chunk]);
+        await inspectFileContents(scan, displayPath);
+        tail = scan.subarray(Math.max(0, scan.length - 8192));
+        hash.update(chunk);
+        await output.writeFile(chunk);
+      }
+    } finally {
+      await input.close();
+      await output.close();
+    }
+    return { snapshot, size, hash: hash.digest('hex') };
   }
 
   async function readIgnoreFile(
@@ -201,16 +223,19 @@ export async function collectFiles(
         });
         continue;
       }
-      const contents = await inspectFile(fullPath);
-      bytes += contents.length;
+      const inspected = await inspectFile(fullPath);
+      bytes += inspected.size;
       if (bytes > totalLimit || files.length >= countLimit) {
         throw new Error('Project exceeds the ' + (build ? 'browser build' : 'source') + ' limits.');
       }
       files.push({
         path: artifactPath,
-        bytes: contents.length,
-        sha256: createHash('sha256').update(contents).digest('hex'),
-        contents,
+        bytes: inspected.size,
+        sha256: inspected.hash,
+        snapshotPath: inspected.snapshot,
+        get contents() {
+          return readFileSync(inspected.snapshot);
+        },
       });
     }
   }

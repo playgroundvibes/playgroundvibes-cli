@@ -1,6 +1,6 @@
 import { ORIGIN } from '../api/transport.js';
 import { inspectCover, type CoverPayload } from '../artifacts/inspect-cover.js';
-import { packProject } from '../artifacts/pack-project.js';
+import { packProject, type ArchiveSnapshot } from '../artifacts/pack-project.js';
 import { scanText } from '../filtering/scan-text.js';
 import { loadProject } from '../project/load-project.js';
 import { buildMetadata } from '../project/metadata.js';
@@ -29,6 +29,7 @@ export interface PreparedUpload {
   readonly review: Review;
   readonly entry: UploadEntry;
   readonly hashes: ArtifactHashes;
+  readonly archives?: { source: ArchiveSnapshot; build?: ArchiveSnapshot };
   readonly identity?: ProjectIdentity;
   previousIdentity: string;
 }
@@ -61,15 +62,27 @@ export async function prepareUpload(
     ...(build?.files.map((file) => ({ artifact: 'build' as const, ...file })) ?? []),
     ...(cover ? [{ artifact: 'cover' as const, ...cover.file }] : []),
   ];
+  const projectBytes = source.bytes + (build?.bytes ?? 0) + (cover?.file.bytes ?? 0);
+  if (projectBytes > 1024 * 1024 * 1024 || files.length > 500)
+    throw new Error(
+      'A project can contain up to 1 GiB and 500 files across source, build and cover.',
+    );
+  const multipart =
+    !source.data ||
+    (build && !build.data) ||
+    source.bytes > 10 * 1024 * 1024 ||
+    source.files.some((file) => file.bytes > 3 * 1024 * 1024) ||
+    (build?.bytes ?? 0) > 10 * 1024 * 1024 ||
+    (build?.files.some((file) => file.bytes > 3 * 1024 * 1024) ?? false);
   const entry: UploadEntry = {
     ...metadata,
-    source: source.data,
-    ...(build ? { build: build.data } : {}),
+    source: multipart ? '' : source.data,
+    ...(build && !multipart ? { build: build.data } : {}),
     ...(cover ? { cover: cover.payload } : {}),
   };
   const hashes: ArtifactHashes = {
-    source: sha256(source.data),
-    ...(build ? { build: sha256(build.data) } : {}),
+    source: multipart ? source.archive.sha256 : sha256(source.data),
+    ...(build ? { build: multipart ? build.archive.sha256 : sha256(build.data) } : {}),
     ...(cover ? { cover: sha256(cover.payload.data) } : {}),
   };
   const warnings = [
@@ -116,6 +129,9 @@ export async function prepareUpload(
     review,
     entry: freezeRecursively(entry),
     hashes: freezeRecursively(hashes),
+    ...(multipart
+      ? { archives: { source: source.archive, ...(build ? { build: build.archive } : {}) } }
+      : {}),
     identity,
     previousIdentity: canonicalJSON(identity ?? {}),
   };

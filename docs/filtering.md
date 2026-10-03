@@ -88,18 +88,20 @@ The checks do not establish that every secret or private detail is absent. Accep
 
 ## Limits and verification
 
-| Item                       | Limit          |
-| -------------------------- | -------------- |
-| Source file                | 50 MiB         |
-| Source total / file count  | 50 MiB / 2,000 |
-| Browser file               | 3 MiB          |
-| Browser total / file count | 10 MiB / 150   |
-| Compressed ZIP artifact    | 10 MiB         |
-| Cover image                | 3 MiB          |
-| JSON upload request        | 16 MiB         |
+| Item                       | Limit                      |
+| -------------------------- | -------------------------- |
+| Source file                | 1 GiB                      |
+| Source total / file count  | 1 GiB / 500                |
+| Browser file               | 1 GiB                      |
+| Browser total / file count | 1 GiB / 500                |
+| Compressed ZIP artifact    | 1 GiB + 2 MiB ZIP overhead |
+| Cover image                | 3 MiB                      |
+| JSON upload request        | 16 MiB                     |
 
 `INSPECTION_LIMITS` records source/build/archive limits. There is no additional text decoding budget. Manifest loading retains its 256 KiB limit. Large combined requests split at artifact boundaries; no individual part may exceed the request limit.
 
 `test/assets.test.mjs` contains an independent fixture of the original exclusion predicate and verifies byte-format acceptance. `test/files.test.mjs` contains the original credential regex fixture, provider/word-boundary cases, and encoded/generic values that the original checks accept. These offline parity checks accompany snapshot, archive, and upload-contract tests; they do not contact or certify the live service.
 
 The build-selection safeguard remains: use an explicit `build_dir`, or exactly one detected `dist`, `build`, or `out` containing `index.html`. Source-only publication requires `source_only: true`. Review and explicit consent remain necessary before the retained bytes are sent.
+
+The combined source, build, and cover must fit 1 GiB and 500 files. Scanning and packaging use private disk snapshots and bounded memory. Large files are scanned in 256 KiB chunks with an 8 KiB overlap; this detects literal patterns across chunk boundaries but is not a general secret detector.
