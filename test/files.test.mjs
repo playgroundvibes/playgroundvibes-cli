@@ -342,6 +342,12 @@ test('tracked browser builds such as build_dir ".." keep .gitignore rules', asyn
   const wholeFiles = Object.keys(unzipSync(Buffer.from(whole.data, 'base64')));
   assert.ok(wholeFiles.includes('app.js'));
   assert.equal(wholeFiles.includes('config.local.js'), false);
+  assert.equal(wholeFiles.includes('.gitignore'), false);
+  assert.ok(
+    whole.skipped.some((file) => file.path === '.gitignore' && file.rule === 'hidden-build-files'),
+  );
+  const source = await pack(root);
+  assert.ok(Object.keys(unzipSync(Buffer.from(source.data, 'base64'))).includes('.gitignore'));
   assert.ok(
     whole.skipped.some((file) => file.path === 'config.local.js' && file.source === 'gitignore'),
   );
@@ -349,6 +355,8 @@ test('tracked browser builds such as build_dir ".." keep .gitignore rules', asyn
   await fs.mkdir(path.join(root, 'public'));
   await fs.writeFile(path.join(root, 'public/index.html'), '<h1>Public</h1>');
   await fs.writeFile(path.join(root, 'public/secret.local.js'), 'window.LOCAL = 2;');
+  await fs.mkdir(path.join(root, 'public/.local'));
+  await fs.writeFile(path.join(root, 'public/.local/settings.json'), '{}');
   const nested = await pack(path.join(root, 'public'), { build: true, projectRoot: root });
   assert.deepEqual(Object.keys(unzipSync(Buffer.from(nested.data, 'base64'))), ['index.html']);
 });

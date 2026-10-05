@@ -133,6 +133,13 @@ export function structuralExclusion(
   build: boolean,
 ): ExclusionMatch | undefined {
   if (isSymlink) return { source: 'built-in', rule: 'symbolic-links', reason: 'symbolic link' };
+  if (build && artifactPath.split('/').some((part) => part.startsWith('.'))) {
+    return {
+      source: 'built-in',
+      rule: 'hidden-build-files',
+      reason: 'hidden files are not browser assets',
+    };
+  }
   const topLevel = artifactPath.split('/')[0];
   if (!build && topLevel && ['dist', 'build', 'out'].includes(topLevel)) {
     return {
