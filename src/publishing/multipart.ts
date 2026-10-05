@@ -24,7 +24,7 @@ async function artifact(
   const hash = createHash('sha256');
   for await (const chunk of createReadStream(file.path)) hash.update(chunk);
   if (hash.digest('hex') !== file.sha256)
-    throw new Error('The reviewed archive changed. Prepare and approve it again.');
+    throw new Error('The reviewed artifact changed. Prepare and approve it again.');
   const started = await send(
     request,
     { action: 'start', kind, bytes: file.bytes, sha256: file.sha256 },
@@ -45,7 +45,7 @@ async function artifact(
       const size = Math.min(5 * 1024 * 1024, file.bytes - offset),
         chunk = Buffer.alloc(size);
       const { bytesRead } = await handle.read(chunk, 0, size, offset);
-      if (bytesRead !== size) throw new Error('The reviewed archive was truncated.');
+      if (bytesRead !== size) throw new Error('The reviewed artifact was truncated.');
       await send(
         request,
         { action: 'part', id: started.id, number, data: chunk.toString('base64') },
@@ -69,7 +69,7 @@ export async function multipartRequest(
   const refs: Record<string, string> = {};
   for (const [kind, file] of Object.entries(upload.archives!))
     refs[kind] = await artifact(request, token, kind, file);
-  const { source: _source, build: _build, ...metadata } = upload.entry;
+  const { source: _source, build: _build, cover: _cover, ...metadata } = upload.entry;
   return {
     version: 1,
     operation_id: operationId,

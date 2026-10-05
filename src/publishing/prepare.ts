@@ -29,7 +29,7 @@ export interface PreparedUpload {
   readonly review: Review;
   readonly entry: UploadEntry;
   readonly hashes: ArtifactHashes;
-  readonly archives?: { source: ArchiveSnapshot; build?: ArchiveSnapshot };
+  readonly archives?: { source: ArchiveSnapshot; build?: ArchiveSnapshot; cover?: ArchiveSnapshot };
   readonly identity?: ProjectIdentity;
   previousIdentity: string;
 }
@@ -68,6 +68,7 @@ export async function prepareUpload(
       'A project can contain up to 1 GiB and 500 files across source, build and cover.',
     );
   const multipart =
+    (cover?.file.bytes ?? 0) > 3 * 1024 * 1024 ||
     !source.data ||
     (build && !build.data) ||
     source.bytes > 10 * 1024 * 1024 ||
@@ -78,12 +79,12 @@ export async function prepareUpload(
     ...metadata,
     source: multipart ? '' : source.data,
     ...(build && !multipart ? { build: build.data } : {}),
-    ...(cover ? { cover: cover.payload } : {}),
+    ...(cover && !multipart ? { cover: cover.payload } : {}),
   };
   const hashes: ArtifactHashes = {
     source: multipart ? source.archive.sha256 : sha256(source.data),
     ...(build ? { build: multipart ? build.archive.sha256 : sha256(build.data) } : {}),
-    ...(cover ? { cover: sha256(cover.payload.data) } : {}),
+    ...(cover ? { cover: multipart ? cover.file.sha256 : sha256(cover.payload.data) } : {}),
   };
   const warnings = [
     'Credential checks match literal patterns in each file’s UTF-8 representation; encoded values and compressed content are not inspected. Review all selected files and metadata before publishing.',
@@ -130,7 +131,13 @@ export async function prepareUpload(
     entry: freezeRecursively(entry),
     hashes: freezeRecursively(hashes),
     ...(multipart
-      ? { archives: { source: source.archive, ...(build ? { build: build.archive } : {}) } }
+      ? {
+          archives: {
+            source: source.archive,
+            ...(build ? { build: build.archive } : {}),
+            ...(cover ? { cover: cover.snapshot } : {}),
+          },
+        }
       : {}),
     identity,
     previousIdentity: canonicalJSON(identity ?? {}),

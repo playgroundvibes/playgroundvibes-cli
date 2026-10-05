@@ -76,3 +76,53 @@ test('browser assets above 3 MiB select multipart without changing reviewed file
   const sourceOnly = await prepareUpload(root, root + '-private', 'account');
   assert(sourceOnly.archives?.source);
 });
+
+test('20 MiB covers upload reviewed snapshots in bounded parts without inline base64', async (t) => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'playground-large-cover-'));
+  t.after(() => fs.rm(root, { recursive: true, force: true }));
+  await fs.mkdir(path.join(root, '.playground'));
+  await fs.writeFile(path.join(root, 'index.html'), '<h1>Cover fixture</h1>');
+  await fs.writeFile(path.join(root, '.gitignore'), 'cover.png\n');
+  const cover = Buffer.alloc(20 * 1024 * 1024);
+  Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(cover);
+  await fs.writeFile(path.join(root, 'cover.png'), cover);
+  await fs.writeFile(
+    path.join(root, '.playground/manifest.json'),
+    JSON.stringify({
+      title: 'Cover fixture',
+      summary: 'Large cover',
+      source_only: true,
+      cover_file: '../cover.png',
+    }),
+  );
+  const prepared = await prepareUpload(root, root + '-private', 'account');
+  assert(prepared.archives?.source);
+  assert(prepared.archives?.cover);
+  assert.equal(prepared.entry.cover, undefined);
+  assert.equal(prepared.hashes.cover, sha(cover));
+  assert.equal(prepared.review.files.find((f) => f.artifact === 'cover').bytes, cover.length);
+  await fs.writeFile(path.join(root, 'cover.png'), 'changed after review');
+  const kinds = new Map(),
+    chunks = [];
+  const result = await multipartRequest(
+    prepared,
+    'operation',
+    async (_endpoint, body) => {
+      assert(Buffer.byteLength(JSON.stringify(body)) < 16 * 1024 * 1024);
+      if (body.action === 'start') {
+        const id = (body.kind === 'cover' ? 'b' : 'a').repeat(36);
+        kinds.set(id, body.kind);
+        return { id, part_bytes: 5 * 1024 * 1024, parts: [] };
+      }
+      if (body.action === 'complete') return { id: body.id, complete: true };
+      if (kinds.get(body.id) === 'cover') chunks.push(Buffer.from(body.data, 'base64'));
+      return { id: body.id, part: body.number };
+    },
+    'credential',
+  );
+  assert.equal(chunks.length, 4);
+  assert.deepEqual(Buffer.concat(chunks), cover);
+  assert.equal(result.uploaded_artifacts.cover, 'b'.repeat(36));
+  assert.equal(result.projects[0].cover, undefined);
+  assert(Buffer.byteLength(JSON.stringify(result)) < 4000);
+});

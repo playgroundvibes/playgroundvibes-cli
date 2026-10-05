@@ -181,15 +181,15 @@ test('literal credentials block cover uploads without retaining secret values in
   assert.equal(f.calls.length, 0);
 });
 
-test('covers allow the exact 3 MiB limit and reject larger files', async (t) => {
+test('covers allow the exact 20 MiB limit and reject larger files', async (t) => {
   const f = await fixture(t);
-  const limit = Buffer.alloc(3 * MIB);
+  const limit = Buffer.alloc(20 * MIB);
   await fs.writeFile(f.coverPath, limit);
   const result = await inspectCover(f.root, f.coverPath);
-  assert.equal(result.file.bytes, 3 * MIB);
+  assert.equal(result.file.bytes, 20 * MIB);
   assert.deepEqual(Buffer.from(result.payload.data, 'base64'), limit);
   await fs.appendFile(f.coverPath, Buffer.from([0]));
-  await assert.rejects(inspectCover(f.root, f.coverPath), /cover_file exceeds 3 MiB/);
+  await assert.rejects(inspectCover(f.root, f.coverPath), /cover_file exceeds 20 MiB/);
 });
 
 test('multipart covers follow source and build and preserve complete hashes and metadata', () => {

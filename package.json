@@ -1,6 +1,6 @@
 {
   "name": "@playgroundvibes/cli",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Consent-based project publishing to Playground Vibes with local secret scanning.",
   "type": "module",
   "main": "./dist/index.js",

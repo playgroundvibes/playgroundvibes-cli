@@ -32,7 +32,7 @@ Unsafe relative paths, symlinks, and nonregular entries are skipped and reported
 
 Ignore-file contents are read as UTF-8 representations to apply their patterns. Reading a file for ignore rules does not itself scan its contents: it receives credential checks only if it is also eligible for upload. Filenames are not credential-scanned. Included files are checked, counted, and retained; neither file extensions nor byte formats restrict source/build selection. Browser output must include a root `index.html`, and empty artifacts are rejected.
 
-An explicit `cover_file` resolves relative to `.playground/` and must select a project-local regular PNG, JPG/JPEG, or WebP file of at most 3 MiB without symlinked paths. As in the original bundle, this separate selection does not apply `.gitignore`, `.playgroundignore`, or the source/build filename exclusions. Its direct UTF-8 representation receives the same credential checks. Review the cover separately; omitting it requires removing `cover_file`.
+An explicit `cover_file` resolves relative to `.playground/` and must select a project-local regular PNG, JPG/JPEG, or WebP file of at most 20 MiB without symlinked paths. As in the original bundle, this separate selection does not apply `.gitignore`, `.playgroundignore`, or the source/build filename exclusions. Its direct UTF-8 representation receives the same credential checks. Review the cover separately; omitting it requires removing `cover_file`.
 
 ## Built-in exclusions
 
@@ -95,10 +95,10 @@ The checks do not establish that every secret or private detail is absent. Accep
 | Browser file               | 1 GiB                      |
 | Browser total / file count | 1 GiB / 500                |
 | Compressed ZIP artifact    | 1 GiB + 2 MiB ZIP overhead |
-| Cover image                | 3 MiB                      |
+| Cover image                | 20 MiB                     |
 | JSON upload request        | 16 MiB                     |
 
-`INSPECTION_LIMITS` records source/build/archive limits. There is no additional text decoding budget. Manifest loading retains its 256 KiB limit. Large combined requests split at artifact boundaries; no individual part may exceed the request limit.
+`INSPECTION_LIMITS` records source/build/archive limits. There is no additional text decoding budget. Manifest loading retains its 256 KiB limit. Large artifacts, including covers, use resumable 5 MiB parts; no individual request may exceed the request limit.
 
 `test/assets.test.mjs` contains an independent fixture of the original exclusion predicate and verifies byte-format acceptance. `test/files.test.mjs` contains the original credential regex fixture, provider/word-boundary cases, and encoded/generic values that the original checks accept. These offline parity checks accompany snapshot, archive, and upload-contract tests; they do not contact or certify the live service.
 
