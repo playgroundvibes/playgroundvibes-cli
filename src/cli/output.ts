@@ -22,6 +22,9 @@ Options:
   -h, --help              Show this help
   -v, --version           Show the package version
 
+Optional creation_details.model and creation_details.harness credit the main coding
+model and app. Free-form estimates are welcome; version/effort details are optional.
+
 Deploy reads .playground/manifest.json in the current project. --dry-run scans
 and reviews files offline without credentials, configuration writes, or uploads.
 Build the browser app first. Set build_dir relative to .playground/, or let the

@@ -38,7 +38,9 @@ The CLI can detect exactly one of `dist/`, `build/`, or `out/` containing `index
 
 Only when the user explicitly chooses publication without a browser preview, set `"source_only": true` and omit `build_dir`. Explain that no browser build is being uploaded. Playground will try supported source builds and can create an overview for a backend app; do not promise a fully working app. This choice does not replace the later upload review and consent.
 
-Preserve `.playground/project.json`, existing source identity, original dates, license, remix choice, and account/project ownership. Do not guess provider requirements or creation provenance. Metadata is scanned too.
+Preserve `.playground/project.json`, existing source identity, original dates, license, remix choice, and account/project ownership. Do not guess provider requirements. Metadata is scanned too.
+
+Try to fill `creation_details` with the model that did most of the building and the coding app/harness. For example, `{"tools":["Claude"],"model":"Opus 5.5 (estimated)","harness":"Claude Code"}` or `{"tools":["Codex"],"model":"Astra 6, high reasoning","harness":"Codex app"}`. Names are free text; model and harness allow up to 100 characters each. Include version and reasoning effort if known, but approximate model families are fine. Any field can be omitted or empty. Use your work on this project, creator input, or obvious build notes already available; do not delay publication to investigate or ask for exact details. The current exporting assistant and runtime API dependencies alone do not identify the primary builder. Preserve existing credits on updates unless the project's main builder has changed; minor edits do not replace the original credit. Do not upload transcripts or private assistant records.
 
 Run `playgroundvibes deploy --dry-run --json` for an offline review. It does not authenticate, write configuration, or upload. Inspect the full source/build/cover file lists, metadata, and exclusions.
 

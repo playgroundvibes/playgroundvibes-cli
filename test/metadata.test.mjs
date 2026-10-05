@@ -151,14 +151,15 @@ test('provider requirements enforce supported providers, models, uniqueness and 
     assert.throws(() => build({ provider_requirements }), /provider|Provider/);
 });
 
-test('creation details require supplied tools and model, known keys, and clean unique service websites', () => {
+test('creation details accept partial credits and validate optional fields and service websites', () => {
   const valid = { tools: ['Codex'], model: '' };
   for (const creation_details of [
     [],
-    {},
-    { tools: ['Codex'] },
     { ...valid, tools: ['Unknown'] },
     { ...valid, model: 123 },
+    { ...valid, harness: 123 },
+    { ...valid, harness: 'line\nbreak' },
+    { ...valid, harness: 'x'.repeat(101) },
     { ...valid, model: 'line\nbreak' },
     { ...valid, extra: true },
     { ...valid, primary_device: 'tablet' },
@@ -179,4 +180,22 @@ test('creation details require supplied tools and model, known keys, and clean u
     ].map((url) => ({ ...valid, services: [{ name: 'Example', purpose: 'Hosting', url }] })),
   ])
     assert.throws(() => build({ creation_details }), undefined, JSON.stringify(creation_details));
+});
+
+test('coding model and harness are optional free-form credits carried in published metadata', () => {
+  for (const [input, expected] of [
+    [{}, { tools: [], model: '' }],
+    [{ tools: ['Codex'] }, { tools: ['Codex'], model: '' }],
+    [{ model: 'Claude Opus 5.5 (probably)' }, { tools: [], model: 'Claude Opus 5.5 (probably)' }],
+    [{ harness: 'Claude Code 2.x' }, { tools: [], model: '', harness: 'Claude Code 2.x' }],
+    [
+      { tools: ['Codex'], model: ' Astra 6, high reasoning ', harness: ' Codex app ' },
+      { tools: ['Codex'], model: 'Astra 6, high reasoning', harness: 'Codex app' },
+    ],
+    [
+      { model: '', harness: '' },
+      { tools: [], model: '', harness: '' },
+    ],
+  ])
+    assert.deepEqual(build({ creation_details: input }).creation_details, expected);
 });

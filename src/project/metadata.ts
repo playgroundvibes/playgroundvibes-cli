@@ -94,21 +94,23 @@ function creationDetails(value: unknown): CreationDetails | null | undefined {
   const creation = shape(
     value,
     'creation_details',
-    ['tools', 'model'],
-    ['tools', 'model', 'services', 'primary_device'],
+    [],
+    ['tools', 'model', 'harness', 'services', 'primary_device'],
   );
+  const creationTools = creation.tools === undefined ? [] : creation.tools;
+  const model = creation.model === undefined ? '' : creation.model;
   if (
-    !Array.isArray(creation.tools) ||
-    creation.tools.length > 5 ||
-    creation.tools.some((tool) => typeof tool !== 'string' || !tools.has(tool))
+    !Array.isArray(creationTools) ||
+    creationTools.length > 5 ||
+    creationTools.some((tool) => typeof tool !== 'string' || !tools.has(tool))
   ) {
     throw new Error('Choose up to five supported creation tools.');
   }
-  // Empty tools/model are permitted by the service when provenance is unknown.
-  // Do not infer either from the CLI, machine, or coding assistant running it.
-  if (typeof creation.model !== 'string')
-    throw new Error('creation_details.model must be a supplied model name or empty text.');
-  boundedText(creation.model, 'creation_details.model', 100, false, true);
+  // Free-form creator/agent estimates are optional; never infer authorship from this CLI.
+  if (typeof model !== 'string')
+    throw new Error('creation_details.model must be a model name, estimate or empty text.');
+  boundedText(model, 'creation_details.model', 100, false, true);
+  const harness = boundedText(creation.harness, 'creation_details.harness', 100, false, true);
   if (
     creation.primary_device !== undefined &&
     (typeof creation.primary_device !== 'string' || !devices.has(creation.primary_device))
@@ -139,8 +141,9 @@ function creationDetails(value: unknown): CreationDetails | null | undefined {
     services.push({ name, purpose, ...(website !== undefined ? { url: website } : {}) });
   }
   return {
-    tools: [...creation.tools] as CreationTool[],
-    model: creation.model,
+    tools: [...creationTools] as CreationTool[],
+    model: model.trim(),
+    ...(harness !== undefined ? { harness: harness.trim() } : {}),
     ...(creation.primary_device !== undefined
       ? { primary_device: creation.primary_device as PrimaryDevice }
       : {}),

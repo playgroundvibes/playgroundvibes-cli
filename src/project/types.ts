@@ -48,8 +48,10 @@ export interface CreationService {
 export interface CreationDetails {
   /** Leave empty when the tools are unknown; the CLI does not infer provenance. */
   readonly tools: readonly CreationTool[];
-  /** Owner-supplied model name, or empty text when unknown. */
+  /** Primary coding model: free-form estimate, with version/effort if known; empty is allowed. */
   readonly model: string;
+  /** Coding app/harness and optional version, such as Claude Code or Codex app. */
+  readonly harness?: string;
   readonly services?: readonly CreationService[];
   readonly primary_device?: PrimaryDevice;
 }
@@ -71,7 +73,7 @@ export interface Manifest {
   readonly repo_url?: string;
   readonly live_url?: string;
   readonly provider_requirements?: readonly ProviderRequirement[] | null;
-  readonly creation_details?: CreationDetails | null;
+  readonly creation_details?: Partial<CreationDetails> | null;
   readonly source_id?: string;
   readonly date?: string;
   readonly source_dir?: string;

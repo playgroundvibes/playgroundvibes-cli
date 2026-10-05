@@ -317,3 +317,17 @@ Tests are offline: scanners use synthetic secrets, and deployment requests are m
 `playgroundvibes deploy` waits up to ten minutes for server processing. `--no-wait` returns after the upload; use `playgroundvibes status --wait --json` to resume checking. Add `--version-id ID` to follow one exact upload. Status checks use the existing account and project connection and never send the source again.
 
 Only `published: true` confirms publication. `preview: "ready"` means a validated app; `preview: "overview"` is a generated introduction for an app requiring backend hosting, not a running copy. Failed processing includes an error and keeps the candidate private. Publishing a listing/preview does not require turning on source downloads or remixing, and it does not require a second browser Publish action.
+
+## Credit the model that built a project
+
+Optional manifest metadata records the primary coding model and coding app/harness:
+
+```json
+"creation_details": {
+  "tools": ["Codex"],
+  "model": "Astra 6, high reasoning (estimated)",
+  "harness": "Codex app"
+}
+```
+
+Model and harness are free text (up to 100 characters each). Use the best project-specific estimate available; include version or reasoning details when known. Any field may be omitted or left blank. Preserve existing credits on updates unless they need correcting. Runtime API models do not identify the model that wrote the project. The bundled skill asks agents to fill these credits during preparation; Playground can fill obvious gaps from uploaded build notes. Credits appear publicly and remain editable on the project page.
