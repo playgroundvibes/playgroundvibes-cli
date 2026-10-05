@@ -77,13 +77,13 @@ test('browser assets above 3 MiB select multipart without changing reviewed file
   assert(sourceOnly.archives?.source);
 });
 
-test('20 MiB covers upload reviewed snapshots in bounded parts without inline base64', async (t) => {
+test('100 MiB covers upload reviewed snapshots in bounded parts without inline base64', async (t) => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'playground-large-cover-'));
   t.after(() => fs.rm(root, { recursive: true, force: true }));
   await fs.mkdir(path.join(root, '.playground'));
   await fs.writeFile(path.join(root, 'index.html'), '<h1>Cover fixture</h1>');
   await fs.writeFile(path.join(root, '.gitignore'), 'cover.png\n');
-  const cover = Buffer.alloc(20 * 1024 * 1024);
+  const cover = Buffer.alloc(100 * 1024 * 1024);
   Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]).copy(cover);
   await fs.writeFile(path.join(root, 'cover.png'), cover);
   await fs.writeFile(
@@ -120,7 +120,7 @@ test('20 MiB covers upload reviewed snapshots in bounded parts without inline ba
     },
     'credential',
   );
-  assert.equal(chunks.length, 4);
+  assert.equal(chunks.length, 20);
   assert.deepEqual(Buffer.concat(chunks), cover);
   assert.equal(result.uploaded_artifacts.cover, 'b'.repeat(36));
   assert.equal(result.projects[0].cover, undefined);

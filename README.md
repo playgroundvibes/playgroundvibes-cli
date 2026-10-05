@@ -143,9 +143,9 @@ Filtering follows the owner's original Node bundle. Every regular file format an
 
 Credential checks match literal patterns in each file’s UTF-8 representation; encoded values and compressed content are not inspected. Review all selected files and metadata before publishing.
 
-Optional `cover_file` selects a project-local PNG, JPEG, or WebP image up to 20 MiB, resolved relative to `.playground/`. As in the original bundle, explicit covers do not apply `.gitignore`, `.playgroundignore`, or the source/build filename exclusions. They require a regular file without symlinked paths and use the same direct UTF-8 credential checks. Covers appear separately in the review. The `tripo` provider setting uses that canonical spelling in `provider_requirements`.
+Optional `cover_file` selects a project-local PNG, JPEG, or WebP image up to 100 MiB, resolved relative to `.playground/`. As in the original bundle, explicit covers do not apply `.gitignore`, `.playgroundignore`, or the source/build filename exclusions. They require a regular file without symlinked paths and use the same direct UTF-8 credential checks. Covers appear separately in the review. The `tripo` provider setting uses that canonical spelling in `provider_requirements`.
 
-Projects allow up to 1 GiB (1,024 MiB) and 500 files across source, browser build, and cover. Large archives use resumable 5 MiB parts; individual JSON requests stay below 16 MiB. Covers remain limited to 20 MiB. HTML documents must be under 8 MiB; keep large data and media in separate assets. Offline tests compare exclusions and accepted file bytes with fixtures of the original policy; they do not establish that every possible secret is detected or every uploaded format can be previewed.
+Projects allow up to 1 GiB (1,024 MiB) and 500 files across source, browser build, and cover. Large archives use resumable 5 MiB parts; individual JSON requests stay below 16 MiB. Covers remain limited to 100 MiB. HTML documents must be under 8 MiB; keep large data and media in separate assets. Offline tests compare exclusions and accepted file bytes with fixtures of the original policy; they do not establish that every possible secret is detected or every uploaded format can be previewed.
 
 ## JavaScript / TypeScript API
 
