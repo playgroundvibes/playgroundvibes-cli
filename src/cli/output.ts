@@ -3,6 +3,7 @@ import type { ExcludedFile, Review } from '../publishing/types.js';
 const help = `Usage: playgroundvibes [--config-dir DIR] <command> [options]
 
 Commands:
+  remix PROJECT_URL [DIR] Download an independent local remix of a saved version
   login [--no-browser]     Open Playground Vibes to obtain a connection code
   connect CODE            Save the account connection for this computer
   whoami                  Show the connected account

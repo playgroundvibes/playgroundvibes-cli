@@ -46,6 +46,11 @@ export async function prepareUpload(
     throw new Error('This project is linked to a different Playground account.');
   }
   const metadata = buildMetadata(manifest, identity ?? {}, root);
+  const publication = metadata.share_source
+    ? PUBLICATION_NOTICE +
+      ' This upload also enables public downloads of the checked source under the selected license' +
+      (metadata.remix ? ' and permits others to remix it.' : '.')
+    : PUBLICATION_NOTICE;
   await scanText(JSON.stringify(metadata), 'project metadata');
   await scanText(
     JSON.stringify({ accountId, projectId: identity?.project_id }),
@@ -105,7 +110,7 @@ export async function prepareUpload(
       metadata,
       files,
       hashes,
-      publication: PUBLICATION_NOTICE,
+      publication,
     }),
   );
   const review = freezeRecursively<Review>({
@@ -124,7 +129,7 @@ export async function prepareUpload(
     ],
     bytes: source.bytes + (build?.bytes ?? 0) + (cover?.file.bytes ?? 0),
     warnings,
-    publication: PUBLICATION_NOTICE,
+    publication,
   });
   return {
     review,

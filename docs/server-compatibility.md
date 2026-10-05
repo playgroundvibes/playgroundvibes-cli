@@ -48,3 +48,9 @@ Imports request publication after server checks pass. The receipt and deployment
 Offline filtering tests compare the implementation against fixtures of the original exclusion and credential predicates and verify accepted file bytes. Contract tests exercise pairing bodies, bearer authentication, base64 artifact hashes, multipart requests, response handling, and updates to a saved project. They run in the GitHub quality gate. They never connect a real account or publish a project.
 
 These checks establish consistency with the supplied and public client contracts, not a live server certification. A real pairing and consented test publication are still needed to verify the deployed service end to end.
+
+## Remix downloads and publication
+
+`GET /api/projects/:id/remix?version=:version` returns the selected source descriptor and metadata after current access/source checks. `GET /api/projects/:id/zip?version=:version` streams the source or redirects to its exact public GitHub commit. Both support anonymous public reads or the existing bearer connection; credentials are never forwarded through external redirects.
+
+Assistant import entries may include `remix_of: {project_id, version_id}` and `share_source: true`. The server validates the origin and inherited license on first creation, records its parent/root/version, and keeps ownership and subsequent updates bound to the new project. Sharing intent survives processing; raw source is never approved through this flag.

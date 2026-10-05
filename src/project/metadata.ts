@@ -252,6 +252,23 @@ export function buildMetadata(
     }
   }
   const requirements = providerRequirements(manifest.provider_requirements);
+  let remixOrigin: { project_id: string; version_id: string } | undefined;
+  if (manifest.remix_of !== undefined) {
+    const value = manifest.remix_of as Record<string, unknown>;
+    if (
+      !value ||
+      typeof value !== 'object' ||
+      Array.isArray(value) ||
+      typeof value.project_id !== 'string' ||
+      !/^[\w-]{1,100}$/.test(value.project_id) ||
+      typeof value.version_id !== 'string' ||
+      !/^[\w-]{1,100}$/.test(value.version_id)
+    )
+      throw new Error('remix_of needs the original project_id and version_id.');
+    remixOrigin = { project_id: value.project_id, version_id: value.version_id };
+  }
+  if (manifest.share_source !== undefined && typeof manifest.share_source !== 'boolean')
+    throw new Error('share_source must be true or false.');
   const creation = creationDetails(manifest.creation_details);
   if (
     identity.source_id !== undefined &&
@@ -281,6 +298,10 @@ export function buildMetadata(
     category: category as ProjectCategory,
     license: license as License,
     remix,
+    ...(remixOrigin ? { remix_of: remixOrigin } : {}),
+    ...(manifest.share_source !== undefined
+      ? { share_source: manifest.share_source as boolean }
+      : {}),
     source_id: sourceId,
     date,
     ...links,

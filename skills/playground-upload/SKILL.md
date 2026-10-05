@@ -30,6 +30,12 @@ Uploads send the reviewed source, browser build, optional cover, and metadata to
 
 Playground keeps private Git history and may automatically improve supported browser projects. A later local upload replaces those server changes; include that consequence when obtaining approval for an update.
 
+## Remix an existing Playground project
+
+When asked to remix a Playground URL, run `npx @playgroundvibes/cli@latest remix PROJECT_URL [NEW_DIRECTORY]`. It downloads the selected saved source, prepares a fresh manifest with `remix_of`, and writes `PLAYGROUND.md`. It creates no remote project and runs no project code. Inspect the original README and dependency files, help run it locally with the user's own service credentials, and record verified setup commands in `PLAYGROUND.md`. Public shared source needs no connection; protected source uses the connected account.
+
+Keep `remix_of`, the new `source_id`, license and attribution. Never copy the original project's account binding. The first deploy creates the user's independent remix; later deploys update its saved project identity. Remixes default to `remix: true` and `share_source: true`; include checked source downloads and further remixing in the publication review. Setup alone does not request publication. Do not silently publish an unrelated project if source access or lineage validation fails.
+
 ## Prepare
 
 Work only in the selected project. Read its build instructions and run the documented browser build with the project's package manager. Build the current source even if an older output directory exists, and verify the generated preview. Prepare `.playground/manifest.json` with accurate title, summary, and `source_dir: ".."`. Paths resolve relative to `.playground/`; set `build_dir` to the actual browser output, such as `"../dist"`. The output needs `index.html` at its root. A plain static site that needs no compilation can use `build_dir: ".."`; a development HTML entrypoint that imports TypeScript is not a finished browser build.

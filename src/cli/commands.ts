@@ -1,3 +1,4 @@
+import { remixProject } from '../remix/remix.js';
 import { spawn } from 'node:child_process';
 import { readFile } from 'node:fs/promises';
 import { createPlaygroundClient } from '../client.js';
@@ -37,6 +38,9 @@ async function openBrowser(url: string): Promise<void> {
 /** Dispatch a fully parsed command; publication always follows review and consent. */
 export async function executeCommand({ configDir, command }: CLIArguments): Promise<void> {
   switch (command.name) {
+    case 'remix':
+      printJson(await remixProject(command.url, command.directory, configDir));
+      return;
     case 'help':
       printHelp();
       return;

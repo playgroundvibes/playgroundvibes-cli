@@ -62,7 +62,14 @@ export interface ProviderRequirement {
 }
 
 /** The editable, local .playground/manifest.json format. */
+export interface RemixOrigin {
+  readonly project_id: string;
+  readonly version_id: string;
+}
+
 export interface Manifest {
+  readonly remix_of?: RemixOrigin;
+  readonly share_source?: boolean;
   readonly title: string;
   readonly summary: string;
   readonly description?: string;
@@ -86,6 +93,8 @@ export interface Manifest {
 
 /** Validated metadata shown in a review and sent with the inspected artifacts. */
 export interface ProjectMetadata {
+  readonly remix_of?: RemixOrigin;
+  readonly share_source?: boolean;
   readonly source_id: string;
   readonly date: string;
   readonly title: string;

@@ -8,6 +8,7 @@ export interface DeployArguments {
 }
 
 export type CLICommand =
+  | { name: 'remix'; url: string; directory?: string }
   | { name: 'help' | 'version' | 'whoami' | 'logout' | 'skill-path' }
   | { name: 'login'; noBrowser: boolean }
   | { name: 'connect'; code: string }
@@ -228,6 +229,12 @@ export function parseArguments(args: string[]): CLIArguments {
       requireNoArguments(rest, name, warnings);
       command = { name };
       break;
+    case 'remix': {
+      if (rest.length < 1 || rest.length > 2 || rest.some((arg) => arg.startsWith('-')))
+        throw new Error('Usage: playgroundvibes remix PROJECT_URL [DIRECTORY]');
+      command = { name: 'remix', url: rest[0]!, ...(rest[1] ? { directory: rest[1] } : {}) };
+      break;
+    }
     case 'deploy':
       command = parseDeploy(rest, warnings);
       break;

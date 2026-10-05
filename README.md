@@ -96,6 +96,16 @@ The default configuration directory is `~/.config/playground-vibes/cli` on macOS
 
 ## Prepare and review a project
 
+To start from an existing remixable Playground project, download a new local copy:
+
+```sh
+npx @playgroundvibes/cli@latest remix "https://playgroundvibes.com/project/PROJECT_ID?version=VERSION_ID" my-remix
+```
+
+The command preserves the selected version and license, writes local setup/publishing instructions in `PLAYGROUND.md`, and generates a fresh manifest. Public shared source needs no login. It does not run project code or create a remote project. Read the project's setup instructions and prepare its browser build before deploying.
+
+The generated manifest includes `remix_of: { project_id, version_id }`, a unique `source_id`, `remix: true`, and `share_source: true`. Keep its origin and identity when editing. The first approved deployment creates your own linked remix; later deployments update the same project. Source sharing is requested explicitly and only checked source becomes downloadable after processing. Existing projects without `share_source` keep source downloads off. Credentials and original project bindings are never copied.
+
 From the project root, create `.playground/manifest.json`:
 
 ```json
