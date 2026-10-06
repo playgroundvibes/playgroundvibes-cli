@@ -11,13 +11,14 @@ This skill depends on Node.js 22+ and `@playgroundvibes/cli`. Use the installed 
 
 ## Set up and connect in one step
 
-The agent can install the skill and connect in one command using a pairing code the user provides in the conversation:
+The recommended guide is a single command the human runs in the project's terminal after generating a code on Playground:
 
 ```sh
-npx @playgroundvibes/cli@latest skill install --pairing-code CODE
+npx @playgroundvibes/cli@latest skill install --claude --pairing-code CODE
+npx @playgroundvibes/cli@latest skill install --codex --pairing-code CODE
 ```
 
-This combined command redeems the eight-character pairing code first, saves the connection in the private configuration directory shared with the global `playgroundvibes` command, and installs the skill. Pairing codes are single-use, expire after twelve hours, and are intended to be shared with the agent in the conversation. Ask the user for a code from https://playgroundvibes.com/#new when needed, then run the command yourself. If the code is invalid or expired, ask for a fresh one. `--pairing-code` also works with the optional setup flags below, and the JSON result includes the `connection`.
+This combined command redeems the eight-character pairing code first, saves the connection in the private configuration directory shared with the global `playgroundvibes` command, and then installs the skill (and, if accepted, command permission). An invalid or expired code stops setup before anything is installed; generate a new code and run it again. `--pairing-code` also works with plain `skill install`, and the JSON result includes the `connection`. Pairing codes expire after a few minutes and are single-use, so let the human run the command; never ask for the code in the conversation.
 
 The flags below can be combined with `--pairing-code`. For Claude setup, use `npx @playgroundvibes/cli@latest skill install --claude` or its `pnpm dlx` equivalent. When standard input and standard error are terminals, it offers project command permission with a default of No. Only `y` or `yes` installs the running CLI version globally when needed and verifies it before merging permissions. Declining, pressing Enter, or closing input still installs only the skill. Noninteractive setup skips the prompt and points to `--allow-claude-commands`; add that flag for scripted or already-authorized command setup, not to infer authorization.
 
@@ -59,7 +60,7 @@ Projects allow up to 1 GiB (1,024 MiB) and 500 files across source, browser buil
 
 ## Connect and obtain consent
 
-Use `playgroundvibes whoami` to inspect and reuse the connection. A computer set up with the combined `skill install --pairing-code CODE` command is already connected. If a connection is needed, ask the user to paste the pairing code from https://playgroundvibes.com/#new into this conversation. Run `npx @playgroundvibes/cli@latest connect CODE` with the supplied code, then continue the requested publishing workflow as soon as the CLI confirms the connection. The user only needs to provide the code; the agent handles the terminal command. Permanent credentials stay in the CLI's private configuration outside the project and must not be requested, displayed in the conversation, or included in an export.
+Use `playgroundvibes whoami` to inspect the connection. A computer set up with the combined `skill install --pairing-code CODE` command is already connected. When it is not, let the human obtain a pairing code using `playgroundvibes login` (or the upload page on Playground) and run `playgroundvibes connect CODE` themselves, or rerun setup with `--pairing-code CODE`, so the code stays out of the conversation. A permanent credential must never enter the repository, conversation, or export. Keep private configuration outside the project.
 
 Run `playgroundvibes deploy --json` to obtain the account-bound review. This checks the connected account with Playground, but sends no project contents. Without consent it deliberately returns a review followed by a consent-required error; this is the expected review stage. Show the user the destination/account, selected project, included source/build/cover files and metadata, exclusions, and the fact that source will be sent and publication requested after server checks pass.
 

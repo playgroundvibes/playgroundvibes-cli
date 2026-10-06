@@ -82,7 +82,7 @@ export async function executeCommand({ configDir, command }: CLIArguments): Prom
   switch (command.name) {
     case 'login':
       process.stdout.write(
-        `Open ${client.loginUrl} to connect your Playground Vibes account.\nThen run: playgroundvibes connect CODE\n`,
+        `Open ${client.loginUrl} to get a pairing code.\nPaste the code into your coding-agent conversation so the agent can connect, or run: playgroundvibes connect CODE\n`,
       );
       if (!command.noBrowser) {
         try {

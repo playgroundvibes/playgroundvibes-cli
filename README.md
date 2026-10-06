@@ -90,6 +90,8 @@ playgroundvibes whoami
 
 Replace the example with the eight-character pairing code generated on Playground. `login --no-browser` prints the website URL. Credentials are stored outside projects with private permissions. Use `playgroundvibes logout` to revoke this computer's connection.
 
+You can paste the pairing code into your coding-agent conversation and have the agent run `npx @playgroundvibes/cli@latest connect CODE`, then continue publishing. Codes are single-use and valid for twelve hours. The permanent credential is saved privately by the CLI and stays out of the conversation.
+
 Before redeeming a code, `connect` runs the same check as `whoami` on any saved connection. If it is still valid, it is kept, the code is not used, and the result includes `"already_connected": true`. Missing, unreadable, revoked (HTTP 401/403), or changed-account credentials are replaced by the new pairing. If the check fails for another reason, such as a network error or server outage, `connect` stops without touching the saved connection or using the code; try again, or run `playgroundvibes logout` first to switch accounts.
 
 The default configuration directory is `~/.config/playground-vibes/cli` on macOS/Linux; `XDG_CONFIG_HOME` is respected. Windows uses `LOCALAPPDATA`, falling back to the home directory. Override with `PLAYGROUND_CONFIG_DIR` or `--config-dir DIR`. The directory must stay outside the project being uploaded.
@@ -292,7 +294,7 @@ playgroundvibes skill install --path .claude/skills/playground-upload
 playgroundvibes skill path
 ```
 
-Default destinations: `.agents/skills/playground-upload/SKILL.md` and `.claude/skills/playground-upload/SKILL.md` in the current project. `--claude`, `--codex`, or `--path` selects a single destination. The default does not modify permission rules or install a global command. Results include `paths` for both destinations, with `path` retaining the Codex destination for compatibility. Installation is explicit and preserves existing edits. `getSkillPath()` and `installSkill({ cwd, directory })` are also exported. Installing the npm package or skill never authorizes publication.
+Default destinations: `.agents/skills/playground-upload/SKILL.md` and `.claude/skills/playground-upload/SKILL.md` in the current project. `--claude`, `--codex`, or `--path` selects a single destination. The default does not modify permission rules or install a global command. Results include `paths` for both destinations, with `path` retaining the Codex destination for compatibility. Rerunning `skill install` refreshes unchanged official copies from recognized earlier releases. Locally edited or unrecognized skills are preserved and reported as conflicts. `getSkillPath()` and `installSkill({ cwd, directory })` are also exported. Installing the npm package or skill never authorizes publication.
 
 ## npm releases
 

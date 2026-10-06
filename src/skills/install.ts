@@ -1,4 +1,5 @@
 import { constants } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { lstat, open, readFile, type FileHandle } from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -9,6 +10,7 @@ import {
 import { prepareCodexCommandPermission, type CodexPermissionResult } from './codex-permissions.js';
 import { ensureDirectory, errorCode } from './filesystem.js';
 import { ensureGlobalCLI, type GlobalCLIResult, type SkillPackageManager } from './global-cli.js';
+import { PREVIOUS_SKILL_HASHES } from './previous-skills.js';
 
 export type { ClaudePermissionResult } from './claude-permissions.js';
 export type { CodexPermissionResult } from './codex-permissions.js';
@@ -44,15 +46,43 @@ export function getSkillPath(): string {
   return fileURLToPath(new URL('../../skills/playground-upload', import.meta.url));
 }
 
-async function existingMatches(filename: string, contents: Buffer): Promise<void> {
+/** Check for an unchanged official skill, optionally refreshing it through the checked handle. */
+async function existingSkill(
+  filename: string,
+  contents: Buffer,
+  refresh = false,
+): Promise<boolean> {
   const info = await lstat(filename);
   if (info.isSymbolicLink()) throw new Error(`Refusing to replace a symbolic link: ${filename}`);
   if (!info.isFile()) throw new Error(`Refusing to overwrite an existing non-file: ${filename}`);
-  const handle = await open(filename, constants.O_RDONLY | (constants.O_NOFOLLOW ?? 0));
+  const handle = await open(
+    filename,
+    (refresh ? constants.O_RDWR : constants.O_RDONLY) | (constants.O_NOFOLLOW ?? 0),
+  );
   try {
-    if (!(await handle.stat()).isFile() || !(await handle.readFile()).equals(contents)) {
+    if (!(await handle.stat()).isFile()) {
+      throw new Error(`Refusing to overwrite an existing non-file: ${filename}`);
+    }
+    const current = await handle.readFile();
+    if (current.equals(contents)) return false;
+    if (!PREVIOUS_SKILL_HASHES.has(createHash('sha256').update(current).digest('hex'))) {
       throw new Error(`Refusing to overwrite a different existing skill: ${filename}`);
     }
+    if (refresh) {
+      let offset = 0;
+      while (offset < contents.length) {
+        const { bytesWritten } = await handle.write(
+          contents,
+          offset,
+          contents.length - offset,
+          offset,
+        );
+        if (!bytesWritten) throw new Error(`Could not refresh the installed skill: ${filename}`);
+        offset += bytesWritten;
+      }
+      await handle.truncate(contents.length);
+    }
+    return true;
   } finally {
     await handle.close();
   }
@@ -71,8 +101,8 @@ async function copySkill(destination: string, contents: Buffer): Promise<boolean
     );
   } catch (error) {
     if (errorCode(error) !== 'EEXIST' && errorCode(error) !== 'ELOOP') throw error;
-    await existingMatches(filename, contents);
-    return false;
+    if (!(await existingSkill(filename, contents))) return false;
+    return existingSkill(filename, contents, true);
   }
   try {
     await handle.writeFile(contents);
@@ -137,7 +167,7 @@ export async function installSkill({
   for (const target of destinations) {
     await ensureDirectory(target);
     try {
-      await existingMatches(path.join(target, 'SKILL.md'), contents);
+      await existingSkill(path.join(target, 'SKILL.md'), contents);
     } catch (error) {
       if (errorCode(error) !== 'ENOENT') throw error;
     }

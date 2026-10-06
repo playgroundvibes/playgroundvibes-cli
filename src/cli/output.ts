@@ -82,6 +82,9 @@ skill install --pairing-code CODE connects this computer to your Playground
 account first (like "connect CODE"), so the CLI is signed in once setup finishes.
 If the code is invalid or expired, nothing is installed. It combines with any
 other skill install option.
+Agents can ask for the single-use pairing code in the conversation, run
+"connect CODE", and continue publishing. Saved permanent credentials stay private.
+Rerun skill install to refresh recognized official skills; local edits are preserved.
 
 Unrecognized --options are ignored with a warning instead of failing.
 `;

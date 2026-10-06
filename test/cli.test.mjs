@@ -516,6 +516,40 @@ test('skill path and explicit default/custom installation work from the compiled
   assert.deepEqual(await globalCLI.calls(), []);
 });
 
+test('skill install refreshes unchanged published skills for both agents and preserves local edits', async (t) => {
+  const globalCLI = await mockedGlobalCLI(t);
+  const { directory, options } = globalCLI;
+  const old = (
+    await readFile(path.join(root, 'test/fixtures/skill-0.1.15.txt'), 'utf8')
+  ).replaceAll('\r\n', '\n');
+  const bundled = await readFile(path.join(root, 'skills/playground-upload/SKILL.md'), 'utf8');
+  const targets = ['.agents', '.claude'].map((agent) =>
+    path.join(directory, agent, 'skills/playground-upload/SKILL.md'),
+  );
+  for (const filename of targets) {
+    await mkdir(path.dirname(filename), { recursive: true });
+    await writeFile(filename, old);
+  }
+  const refreshed = invoke(['skill', 'install'], options);
+  assert.equal(refreshed.status, 0, refreshed.stderr);
+  assert.equal(events(refreshed)[0].installed, true);
+  for (const filename of targets) assert.equal(await readFile(filename, 'utf8'), bundled);
+  assert.equal(events(invoke(['skill', 'install'], options))[0].installed, false);
+  const custom = old + '\nKeep this project-specific instruction.\n';
+  await writeFile(targets[0], old);
+  await writeFile(targets[1], custom);
+  const conflict = invoke(['skill', 'install'], options);
+  assert.equal(conflict.status, 1);
+  assert.match(conflict.stderr, /Refusing to overwrite a different existing skill/);
+  assert.equal(await readFile(targets[0], 'utf8'), old);
+  assert.equal(await readFile(targets[1], 'utf8'), custom);
+  await assert.rejects(access(path.join(directory, '.claude/settings.local.json')), {
+    code: 'ENOENT',
+  });
+  await assert.rejects(access(path.join(directory, '.codex/rules')), { code: 'ENOENT' });
+  assert.deepEqual(await globalCLI.calls(), []);
+});
+
 test('Claude skill installation selects its default directory without changing permissions', async (t) => {
   const globalCLI = await mockedGlobalCLI(t);
   const { directory, options } = globalCLI;
