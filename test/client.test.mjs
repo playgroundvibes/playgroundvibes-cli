@@ -441,12 +441,14 @@ test('status keeps publication separate from upload and cannot change account or
   f.control.responseFields = {
     published: true,
     publication: 'published',
+    url: '/project/project-fixture',
     preview: 'overview',
     processing: { status: 'complete' },
   };
   const completed = await f.client.deploymentStatus(result.version_id);
   assert.equal(completed.published, true);
   assert.equal(completed.preview, 'overview');
+  assert.equal(completed.url, 'https://playgroundvibes.com/project/project-fixture');
   assert.equal(imports(f).length, 1);
   const statusCall = f.calls.find((c) => c.endpoint === '/api/assistant/deployment-status');
   assert.deepEqual(statusCall.body, { project_id: result.id, version_id: result.version_id });

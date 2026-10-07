@@ -75,7 +75,7 @@ export function readDeploymentStatus(value: JsonObject, projectId?: string): Dep
     typeof version_id !== 'string' ||
     !version_id ||
     typeof url !== 'string' ||
-    !/^\/#project\/[^\s]+$/.test(url)
+    !/^\/(?:#project\/|project\/)[^/?#\s]+(?:\?[^#\s]*)?$/.test(url)
   ) {
     throw new Error('Upload completion could not be verified. Retry the same reviewed project.');
   }
@@ -84,6 +84,9 @@ export function readDeploymentStatus(value: JsonObject, projectId?: string): Dep
       'The upload response does not match the reviewed project. The saved identity was preserved.',
     );
   }
+  // Published links use the crawlable production route. Keep private/pending
+  // hash links usable, and accept both server contracts during the transition.
+  const projectURL = published === true ? url.replace(/^\/#project\//, '/project/') : url;
   // The reference CLI treats these fields as optional display information.
   // Unknown optional shapes must not turn an acknowledged import into a failure.
   const processingStatus =
@@ -100,7 +103,7 @@ export function readDeploymentStatus(value: JsonObject, projectId?: string): Dep
     status,
     id,
     version_id,
-    url: ORIGIN + url,
+    url: ORIGIN + projectURL,
     ...(typeof preview === 'string' ? { preview } : {}),
     ...(typeof published === 'boolean' ? { published } : {}),
     ...(typeof publication === 'string' ? { publication } : {}),

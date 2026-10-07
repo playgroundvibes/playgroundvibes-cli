@@ -330,6 +330,8 @@ Tests are offline: scanners use synthetic secrets, and deployment requests are m
 
 Only `published: true` confirms publication. `preview: "ready"` means a validated app; `preview: "overview"` is a generated introduction for an app requiring backend hosting, not a running copy. Failed processing includes an error and keeps the candidate private. Publishing a listing/preview does not require turning on source downloads or remixing, and it does not require a second browser Publish action.
 
+Published results use `https://playgroundvibes.com/project/PROJECT_ID`. Both current production URLs and legacy `/#project/PROJECT_ID` responses are accepted; private and pending links retain their hash route.
+
 ## Credit the model that built a project
 
 Optional manifest metadata records the primary coding model and coding app/harness:
