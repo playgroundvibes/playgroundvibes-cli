@@ -31,7 +31,7 @@ test('one conventional browser output is detected when build_dir is omitted', as
   }
 });
 
-test('missing output does not infer a source-only publication or run a build script', async (t) => {
+test('missing output uploads source for automatic preparation without running local build scripts', async (t) => {
   const f = await fixture(t);
   await fs.writeFile(path.join(f.root, 'index.html'), '<h1>Unselected project root</h1>');
   await fs.mkdir(path.join(f.root, 'dist'));
@@ -44,10 +44,7 @@ test('missing output does not infer a source-only publication or run a build scr
     "import { writeFileSync } from 'node:fs'; writeFileSync('dist/index.html', '<h1>Built</h1>');",
   );
   for (const manifest of [{}, { source_only: false }]) {
-    await assert.rejects(
-      f.resolve(manifest),
-      (error) => /build_dir/.test(error.message) && /source_only/.test(error.message),
-    );
+    assert.equal(await f.resolve(manifest), undefined);
   }
   await assert.rejects(fs.access(path.join(f.root, 'dist/index.html')), { code: 'ENOENT' });
   assert.equal(await f.resolve({ build_dir: '..' }), f.root);
@@ -65,24 +62,24 @@ test('source-only mode is explicit, boolean, and incompatible with a selected bu
   }
 });
 
-test('ambiguous conventional output requires a manifest-relative explicit selection', async (t) => {
+test('ambiguous output uses source; an explicit selection still chooses the intended build', async (t) => {
   const f = await fixture(t);
   await f.output('dist');
   const expected = await f.output('build');
-  await assert.rejects(f.resolve(), /Multiple browser builds.*build_dir/);
+  assert.equal(await f.resolve(), undefined);
   assert.equal(await f.resolve({ build_dir: '../build' }), expected);
   const custom = await f.output('web/public');
   assert.equal(await f.resolve({ build_dir: '../web/public' }), custom);
 });
 
-test('invalid explicit output fails without falling back to a valid detected build', async (t) => {
+test('missing explicit output uses source while unsafe paths remain blocked', async (t) => {
   const f = await fixture(t);
   await f.output('dist');
   await fs.mkdir(path.join(f.root, 'empty'));
   await fs.mkdir(path.join(f.root, 'not-regular/index.html'), { recursive: true });
   await fs.writeFile(path.join(f.root, 'file.txt'), 'Not a browser build directory');
   for (const build_dir of ['../missing', '../empty', '../not-regular', '../file.txt']) {
-    await assert.rejects(f.resolve({ build_dir }), /build_dir.*regular index\.html/);
+    assert.equal(await f.resolve({ build_dir }), undefined);
   }
   for (const build_dir of ['', ' ../dist', '../dist ', '../dist\n', null, 1, []]) {
     await assert.rejects(f.resolve({ build_dir }), /build_dir must be a nonempty path/);
@@ -93,7 +90,7 @@ test('invalid explicit output fails without falling back to a valid detected bui
 test('a nonregular conventional index does not qualify as browser output', async (t) => {
   const f = await fixture(t);
   await fs.mkdir(path.join(f.root, 'dist/index.html'), { recursive: true });
-  await assert.rejects(f.resolve(), /No browser build/);
+  assert.equal(await f.resolve(), undefined);
 });
 
 test('symlinked build directories are refused even when another candidate is valid', async (t) => {

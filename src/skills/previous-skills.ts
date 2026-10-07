@@ -23,4 +23,6 @@ export const PREVIOUS_SKILL_HASHES: ReadonlySet<string> = new Set([
   '1d3aac9ca5a6c37a09a50ddecbd8eeac9c1676f583520330a886659f6de23fd8',
   // v0.1.14, v0.1.15
   'a43ac5eadf6a2cd9798c9d7a385679ddf6a6195910eb9ebee4134537d865beaa',
+  // v0.1.16, v0.1.17
+  '6f68ce9bcd63054bf03c9b153cb29174518adfc1b3677ecac93d46cd5a7d7779',
 ]);

@@ -125,7 +125,7 @@ Paths are relative to `.playground/`; `source_dir` must select the current proje
 
 Without `build_dir`, the CLI detects a browser build in `dist/`, `build/`, or `out/`. Exactly one of those directories must contain `index.html`; if more than one matches, set `build_dir` to select the intended output. Custom output directories require `build_dir`. A plain static site can use `build_dir: ".."` if the project root is already browser-ready; a development entrypoint that imports TypeScript needs to be built first.
 
-Missing, invalid, or blocked builds stop the upload. They never silently fall back to source-only publication. To intentionally publish source without a browser preview, set `"source_only": true` in the manifest and remove `build_dir`. This is an explicit choice starting in 0.1.2; merely omitting `build_dir` no longer selects source-only mode. Both options are local controls and are not sent as server metadata.
+If a build is missing or ambiguous, the CLI uploads source and Playground prepares the preview automatically. Set `"source_only": true` and omit `build_dir` to prefer this path explicitly. The review shows whether a build is included. Playground publishes a checked app or a labeled overview while it retries recoverable processing problems. Unsafe paths and account mismatches still require correction. These options are local controls and are not sent as server metadata.
 
 ```sh
 playgroundvibes deploy --dry-run

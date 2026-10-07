@@ -91,7 +91,7 @@ test('an omitted build_dir includes detected browser files in the review and act
     ['app.js', 'app.js.map', 'index.html', 'model.custom-binary'],
   );
   assert.equal(
-    review.warnings.some((warning) => warning.startsWith('Source only:')),
+    review.warnings.some((warning) => warning.startsWith('Source saved without a browser build.')),
     false,
   );
   await f.client.deploy(review, { consent: review.digest });
@@ -116,11 +116,12 @@ test('an omitted build_dir includes detected browser files in the review and act
   assert.equal(Object.hasOwn(entry, 'source_only'), false);
 });
 
-test('missing browser output blocks offline inspection and preparation before import or project writes', async (t) => {
+test('missing browser output can be reviewed and prepared for source processing without early uploads', async (t) => {
   const f = await fixture(t, { build_dir: undefined });
   await fs.rm(path.join(f.root, 'dist'), { recursive: true });
   await fs.writeFile(path.join(f.root, 'index.html'), '<h1>Root is not an automatic build</h1>');
-  await assert.rejects(f.client.inspect(), /No browser build.*build_dir.*source_only/);
+  const offline = await f.client.inspect();
+  assert.ok(offline.files.every((file) => file.artifact === 'source'));
   assert.equal(f.calls.length, 0);
   await assert.rejects(fs.access(f.configDir), { code: 'ENOENT' });
   await assert.rejects(fs.access(path.join(f.root, '.playground/project.json')), {
@@ -130,7 +131,8 @@ test('missing browser output blocks offline inspection and preparation before im
   await f.client.connect('ABCD2345');
   const connectionPath = path.join(f.configDir, 'connection.json');
   const connection = await fs.readFile(connectionPath);
-  await assert.rejects(f.client.prepare(), /No browser build/);
+  const prepared = await f.client.prepare();
+  assert.ok(prepared.files.every((file) => file.artifact === 'source'));
   assert.deepEqual(await fs.readFile(connectionPath), connection);
   assert.equal(imports(f).length, 0);
   await assert.rejects(fs.access(path.join(f.root, '.playground/project.json')), {
@@ -143,7 +145,9 @@ test('explicit source-only publication omits browser artifacts and the local sou
   await f.client.connect('ABCD2345');
   const review = await f.client.prepare();
   assert.ok(review.files.every((file) => file.artifact === 'source'));
-  assert.ok(review.warnings.some((warning) => warning.startsWith('Source only:')));
+  assert.ok(
+    review.warnings.some((warning) => warning.startsWith('Source saved without a browser build.')),
+  );
   assert.equal(Object.hasOwn(review.metadata, 'source_only'), false);
   await f.client.deploy(review, { consent: review.digest });
   const entry = imports(f)[0].body.projects[0];

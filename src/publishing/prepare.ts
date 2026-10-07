@@ -95,7 +95,9 @@ export async function prepareUpload(
     'Credential checks match literal patterns in each file’s UTF-8 representation; encoded values and compressed content are not inspected. Review all selected files and metadata before publishing.',
   ];
   if (!build)
-    warnings.push('Source only: explicitly selected; no browser preview will be uploaded.');
+    warnings.push(
+      'Source saved without a browser build. Playground will prepare a preview automatically; projects needing more setup receive an overview.',
+    );
   if (!manifest.date && !identity?.date)
     warnings.push('No original date supplied; the current date is used.');
 

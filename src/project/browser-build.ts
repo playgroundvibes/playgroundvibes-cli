@@ -36,7 +36,7 @@ function explicitBuildPath(value: unknown, manifestPath: string): string {
   return path.resolve(path.dirname(manifestPath), value);
 }
 
-/** Require browser output unless the manifest explicitly requests a source-only publication. */
+/** Prefer supplied browser output; otherwise let the processor prepare the saved source. */
 export async function resolveBrowserBuild(
   root: string,
   manifest: JsonObject,
@@ -59,11 +59,6 @@ export async function resolveBrowserBuild(
       root,
       explicitBuildPath(manifest.build_dir, manifestPath),
     );
-    if (!directory) {
-      throw new Error(
-        'build_dir must point to an existing browser build directory containing a regular index.html at its root. Build the app first and check the manifest-relative path.',
-      );
-    }
     return directory;
   }
 
@@ -73,12 +68,7 @@ export async function resolveBrowserBuild(
     if (directory) candidates.push(directory);
   }
   if (candidates.length === 1) return candidates[0];
-  if (candidates.length > 1) {
-    throw new Error(
-      'Multiple browser builds were found in dist/, build/, or out/. Set build_dir in .playground/manifest.json to the intended output directory.',
-    );
-  }
-  throw new Error(
-    'No browser build was found in dist/, build/, or out/. Build the app first and set build_dir in .playground/manifest.json if its output is elsewhere. For an intentional source-only publication, set source_only: true.',
-  );
+  // Ambiguous output is also recoverable from source; do not guess which build
+  // the creator intended or require them to resolve it before uploading.
+  return undefined;
 }
